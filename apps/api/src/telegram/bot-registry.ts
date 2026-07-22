@@ -2,9 +2,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Bot } from 'grammy';
 import { eq } from 'drizzle-orm';
 import { DB, type Database } from '../db/db.module.js';
-import { ENV } from '../config/config.module.js';
-import type { Env } from '../config/env.js';
-import { SecretBox } from '../common/crypto.js';
+import { SECRET_BOX } from '../common/crypto.module.js';
+import type { SecretBox } from '../common/crypto.js';
 import { bots } from '../db/schema.js';
 
 /**
@@ -15,15 +14,12 @@ import { bots } from '../db/schema.js';
 @Injectable()
 export class BotRegistry {
   private readonly logger = new Logger(BotRegistry.name);
-  private readonly box: SecretBox;
   private readonly cache = new Map<string, { bot: Bot; secret: string }>();
 
   constructor(
     @Inject(DB) private readonly db: Database,
-    @Inject(ENV) private readonly env: Env,
-  ) {
-    this.box = new SecretBox(env.SECRET_ENCRYPTION_KEY);
-  }
+    @Inject(SECRET_BOX) private readonly box: SecretBox,
+  ) {}
 
   async get(botId: string): Promise<{ bot: Bot; secret: string } | null> {
     const cached = this.cache.get(botId);
@@ -35,7 +31,7 @@ export class BotRegistry {
     let token: string;
     try {
       token = this.box.decrypt(row.tokenEnc);
-    } catch (e) {
+    } catch {
       this.logger.error(`Failed to decrypt token for bot ${botId}`);
       return null;
     }
