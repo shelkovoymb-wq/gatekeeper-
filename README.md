@@ -36,6 +36,10 @@ gatekeeper/
 
 ## Запуск в домашней лабе
 
+Деплой-хост — **traefik-ha (192.168.1.44)**, там же общий Traefik стека skud24
+(`/opt/skud24-traefik`, сеть `skud24-traefik_traefik-net`, resolver `le`).
+`docker-compose.yml` уже настроен под эти реквизиты.
+
 1. Подготовьте окружение:
    ```bash
    cd gatekeeper
@@ -59,7 +63,7 @@ gatekeeper/
 
 ### Без Traefik
 
-Уберите блок `labels`, сеть `edge` и опубликуйте порт: добавьте `ports: ["3000:3000"]` в сервис `api`. Telegram требует HTTPS для webhook — поставьте перед API любой reverse-proxy с TLS (Caddy/nginx) или туннель.
+Уберите блок `labels`, внешнюю сеть `traefik` и опубликуйте порт: добавьте `ports: ["3000:3000"]` в сервис `api`. Telegram требует HTTPS для webhook — поставьте перед API любой reverse-proxy с TLS (Caddy/nginx) или туннель.
 
 ## Локальная разработка
 

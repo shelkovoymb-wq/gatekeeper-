@@ -1,6 +1,9 @@
-# Gatekeeper — деплой в домашней лабе.
-# Предполагается уже работающий Traefik с сетью `edge` и резолвером `le`
-# (как у остального стека skud24). Если Traefik нет — см. README, секция «Без Traefik».
+# Gatekeeper — деплой в домашней лабе на хосте traefik-ha (192.168.1.44).
+# Реквизиты подтверждены разведкой по хосту:
+#   - внешняя docker-сеть Traefik: skud24-traefik_traefik-net
+#   - certresolver: le (Let's Encrypt, HTTP-01)
+#   - entrypoints: web (80 → редирект) / websecure (443, TLS le)
+# Стек Traefik лежит в /opt/skud24-traefik. Если Traefik нет — см. README, «Без Traefik».
 
 services:
   postgres:
@@ -46,10 +49,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    networks: [internal, edge]
+    networks: [internal, traefik]
     labels:
       - traefik.enable=true
-      - traefik.docker.network=edge
+      - traefik.docker.network=skud24-traefik_traefik-net
       - traefik.http.routers.gatekeeper-api.rule=Host(`gatekeeper.skud24.ru`)
       - traefik.http.routers.gatekeeper-api.entrypoints=websecure
       - traefik.http.routers.gatekeeper-api.tls.certresolver=le
@@ -61,5 +64,7 @@ volumes:
 
 networks:
   internal:
-  edge:
+  # Внешняя сеть Traefik на хосте traefik-ha (создаётся стеком /opt/skud24-traefik).
+  traefik:
     external: true
+    name: skud24-traefik_traefik-net
