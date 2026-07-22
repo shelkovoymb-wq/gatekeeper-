@@ -1,0 +1,65 @@
+# Gatekeeper — деплой в домашней лабе.
+# Предполагается уже работающий Traefik с сетью `edge` и резолвером `le`
+# (как у остального стека skud24). Если Traefik нет — см. README, секция «Без Traefik».
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gatekeeper
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gatekeeper}
+      POSTGRES_DB: gatekeeper
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gatekeeper"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [internal]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [internal]
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://gatekeeper:${POSTGRES_PASSWORD:-gatekeeper}@postgres:5432/gatekeeper
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [internal, edge]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=edge
+      - traefik.http.routers.gatekeeper-api.rule=Host(`gatekeeper.skud24.ru`)
+      - traefik.http.routers.gatekeeper-api.entrypoints=websecure
+      - traefik.http.routers.gatekeeper-api.tls.certresolver=le
+      - traefik.http.services.gatekeeper-api.loadbalancer.server.port=3000
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  internal:
+  edge:
+    external: true

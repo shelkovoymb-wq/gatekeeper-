@@ -1,0 +1,18 @@
+{
+  "name": "gatekeeper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Gatekeeper — платформа управления закрытыми Telegram-каналами (gatekeeper.skud24.ru)",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:api": "pnpm --filter @gatekeeper/api start:dev",
+    "build": "pnpm -r build",
+    "db:generate": "pnpm --filter @gatekeeper/api db:generate",
+    "db:migrate": "pnpm --filter @gatekeeper/api db:migrate",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
+  }
+}
