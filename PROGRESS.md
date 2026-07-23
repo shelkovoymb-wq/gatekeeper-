@@ -255,3 +255,158 @@ Can deploy to production after:
 2. Environment variables configured
 3. Webhook URLs registered with providers
 4. Database migrations run
+
+---
+
+## Session 2: 2026-07-24 — Frontend Dashboard & n8n Planning
+
+### ✅ STAGE 2: FRONTEND ADMIN DASHBOARD — FOUNDATION COMPLETE ✅
+
+**Admin Dashboard Pages:**
+- [x] `/admin/payments` — платежи (список, фильтры по статусу/провайдеру/периоду)
+- [x] `/admin/refunds` — возвраты (заглушка для разработки)
+- [x] `/admin/analytics` — аналитика (заглушка для разработки)
+- [x] `/portal/subscriptions` — клиентский портал (заглушка)
+
+**Components Created:**
+```
+components/payments/
+  ├── PaymentList.tsx (таблица платежей)
+  ├── PaymentFilters.tsx (фильтры)
+
+components/refunds/
+  ├── RefundList.tsx
+  ├── RefundForm.tsx
+
+components/analytics/
+  ├── RevenueChart.tsx
+  ├── PaymentMethodsChart.tsx
+  ├── AnalyticsStats.tsx
+
+components/portal/
+  ├── SubscriptionCard.tsx
+  ├── SubscriptionDetails.tsx
+
+hooks/
+  └── usePayments.ts (API интеграция)
+
+types/
+  └── payment.ts (TypeScript types)
+```
+
+**COMMIT**
+```
+9bd47b7 - feat(frontend): Stage 2 — Admin Dashboard foundation
+```
+
+### 🚧 STAGE 3: n8n WORKFLOWS — READY TO BUILD
+
+**Workflows to create (in live n8n, not in repo):**
+
+1. **Payment Success Workflow** (payment.succeeded event)
+   - Trigger: webhook from Gatekeeper API (outbox pattern)
+   - Actions:
+     - Activate subscription (update access in DB)
+     - Send welcome message to Telegram channel
+     - Send invoice/receipt email
+     - Log to analytics
+   
+2. **Dunning Workflow** (retry failed payments)
+   - Trigger: Daily check for failed payments
+   - Actions:
+     - Find subscriptions in grace period
+     - Retry payment via stored payment method
+     - If success → reactivate subscription
+     - If fail → notify customer, schedule retry
+     - If 3 failures → deactivate subscription
+   
+3. **Reports Workflow** (daily/weekly analytics)
+   - Trigger: Schedule (06:00 daily, 09:00 Monday)
+   - Actions:
+     - Calculate: revenue, transaction count, success rate
+     - Generate: PDF report, charts
+     - Send email to admin
+
+**Webhook Endpoints Ready:**
+- `POST /events/outbox` (for n8n polling/webhooks)
+- Payment events: `payment.succeeded`, `payment.failed`, `payment.refunded`
+
+### ⏳ STAGE 4: TESTING & QA
+
+**Not started** (next after n8n):
+- Unit tests (Jest + Vitest)
+- Integration tests
+- E2E tests (Playwright)
+- Load testing
+- Target: 80%+ coverage
+
+### 📝 Git Status
+
+```
+Last commits:
+0bf9f88 - docs(progress): final checkpoint — Stage 1 COMPLETE
+6d63031 - feat(payments): integrate YooKassa, CloudPayments, Robokassa
+57862e0 - feat(payments): initial payment system module
+9bd47b7 - feat(frontend): Stage 2 — Admin Dashboard foundation
+```
+
+### 🎯 What's Ready
+
+**API** ✅
+- POST `/payments/initiate` (create payment)
+- POST `/payments/webhook/:provider` (handle webhooks)
+- GET `/payments/:paymentId` (get status)
+- GET `/payments?filters` (list with filters) [TODO]
+- POST `/payments/:paymentId/refund` [TODO]
+
+**Frontend** ✅
+- Admin dashboard pages (payments, refunds, analytics)
+- Payment filters & listing
+- Client portal (subscriptions)
+- Hooks for API integration
+- Types defined
+
+**Database** ✅
+- payments table (Drizzle schema ready)
+- paymentConfigs table (per-client credentials)
+- Ready for migrations
+
+### 🚀 Next Steps (IMMEDIATE)
+
+1. **Complete n8n workflows** (in live n8n)
+2. **Add API endpoints** for payments listing & refunds
+3. **Build chart components** (Recharts or Chart.js)
+4. **Write tests** (Jest + Vitest, 80%+ coverage)
+5. **Deploy to pve3** (Docker, docker-compose)
+
+### 💾 Resume Checkpoint
+
+To continue in next session:
+
+```bash
+cd D:\google\obsidian\Claude\APpro\gatekeeper-frontend\gatekeeper
+
+# Verify at right commits
+git log --oneline -3
+# Should show: 9bd47b7 feat(frontend)...
+
+# Check what's left
+cat PROGRESS.md
+
+# Next stages:
+# 1. Create n8n workflows (in live n8n UI)
+# 2. Complete API endpoints (/payments/list, /refund)
+# 3. Build analytics charts
+# 4. Write tests
+# 5. Docker deploy to pve3
+```
+
+---
+
+**STATUS: 50% COMPLETE (Stages 1-2 done, 3-4 to go)**
+
+Stages 1-2 production-ready after:
+- Tests pass
+- Environment variables set
+- Webhooks registered with payment providers
+- n8n workflows created & tested
