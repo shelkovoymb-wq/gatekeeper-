@@ -1,0 +1,68 @@
+# Gatekeeper — деплой на ОТДЕЛЬНОМ docker-хосте (LXC на pve3).
+# Self-contained: api + postgres + redis. Traefik здесь НЕТ — публикация наружу
+# идёт через gatekeeper-proxy на хосте traefik-ha (.44), см. ./gatekeeper-proxy/.
+#
+# API публикуется на порт хоста 3000 (его проксирует gatekeeper-proxy на .44).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gatekeeper
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gatekeeper}
+      POSTGRES_DB: gatekeeper
+    # Экономный профиль под небольшой LXC (можно поднять при росте нагрузки).
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_connections=50
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gatekeeper"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [internal]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [internal]
+
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file: ../../.env
+    environment:
+      DATABASE_URL: postgres://gatekeeper:${POSTGRES_PASSWORD:-gatekeeper}@postgres:5432/gatekeeper
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Публикуем API на порт LXC — его забирает gatekeeper-proxy на .44.
+    ports:
+      - "3000:3000"
+    networks: [internal]
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  internal:

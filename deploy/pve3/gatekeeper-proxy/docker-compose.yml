@@ -1,0 +1,23 @@
+# gatekeeper-proxy — запускается на хосте traefik-ha (192.168.1.44), в /opt/gatekeeper-proxy.
+# Повторяет паттерн *-proxy стека skud24: nginx с Traefik-лейблами публикует
+# gatekeeper.skud24.ru и проксирует на API в LXC на pve3 (192.168.1.25:3000).
+
+services:
+  gatekeeper-proxy:
+    image: nginx:alpine
+    restart: unless-stopped
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [traefik]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=skud24-traefik_traefik-net
+      - traefik.http.routers.gatekeeper.rule=Host(`gatekeeper.skud24.ru`)
+      - traefik.http.routers.gatekeeper.entrypoints=websecure
+      - traefik.http.routers.gatekeeper.tls.certresolver=le
+      - traefik.http.services.gatekeeper.loadbalancer.server.port=80
+
+networks:
+  traefik:
+    external: true
+    name: skud24-traefik_traefik-net
