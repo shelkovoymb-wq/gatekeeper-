@@ -133,8 +133,21 @@ curl -sX POST $API/v1/channels/<channelId>/invite-link -H "Authorization: Bearer
 #    Пользователь без подписки → decline + сообщение с призывом оформить /start.
 ```
 
-Отзыв доступа (`AccessService.revokeAllForSubscriber`) — «мягкий kick» (ban+unban);
-автоматизируется reaper'ом на следующем шаге Фазы 1 (expiry → grace → kick).
+### Автоматика жизненного цикла (реализовано)
+
+- **Reaper** (`@Cron */5 мин`): `active` (истёк `paid_until`, `grace_days>0`) → `grace`;
+  `grace` (истёк `grace_until`) или `active` без grace → `expired` + постановка kick.
+  Все переходы идемпотентны (bulk `UPDATE ... RETURNING`).
+- **Очередь доступа** (BullMQ, Redis): `AccessWorker` выполняет «мягкий kick» (ban+unban)
+  с retry/exponential backoff; kick пропускается, если у подписчика есть другая
+  активная подписка на канал.
+- **Outbox → n8n**: изменения статуса пишутся в `outbox_events`; `OutboxDispatcher`
+  (`@Cron 30с`) POST'ит их на `N8N_EVENTS_WEBHOOK_URL` (`subscription.grace`,
+  `subscription.expired`, …) для dunning/welcome/алертов. При недоступности n8n —
+  ретраи до 5 попыток, затем `failed` (не теряются).
+
+Полный цикл: `оплатил → впустили → истёк → grace → kick → оплатил → вернули`.
+Платёжная часть (ЮKassa + Stars, авто-charge при продлении) — следующий шаг.
 
 ## Интеграция с n8n
 

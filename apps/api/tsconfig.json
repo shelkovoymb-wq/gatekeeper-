@@ -6,7 +6,6 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "baseUrl": "./",
-    "incremental": true,
     "types": ["node", "reflect-metadata"]
   },
   "include": ["src/**/*"],

@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule } from './config/config.module.js';
 import { DbModule } from './db/db.module.js';
 import { CryptoModule } from './common/crypto.module.js';
+import { QueueModule } from './queue/queue.module.js';
 import { HealthController } from './health/health.controller.js';
 import { TelegramCoreModule } from './telegram/telegram-core.module.js';
 import { TelegramModule } from './telegram/telegram.module.js';
@@ -12,6 +14,8 @@ import { PlansModule } from './plans/plans.module.js';
 import { SubscribersModule } from './subscribers/subscribers.module.js';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module.js';
 import { AccessModule } from './access/access.module.js';
+import { EventsModule } from './events/events.module.js';
+import { ReaperModule } from './reaper/reaper.module.js';
 
 /**
  * Корневой модуль. Фаза 1 (join-request flow): bots, channels, plans,
@@ -21,9 +25,11 @@ import { AccessModule } from './access/access.module.js';
  */
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule,
     DbModule,
     CryptoModule,
+    QueueModule,
     TelegramCoreModule,
     TenantsModule,
     BotsModule,
@@ -32,6 +38,8 @@ import { AccessModule } from './access/access.module.js';
     SubscribersModule,
     SubscriptionsModule,
     AccessModule,
+    EventsModule,
+    ReaperModule,
     TelegramModule,
   ],
   controllers: [HealthController],
