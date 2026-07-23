@@ -1,0 +1,148 @@
+{
+  "name": "Reports Workflow - Daily & Weekly Analytics",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerType": "every",
+        "unit": "hours",
+        "value": 24,
+        "options": {}
+      },
+      "id": "daily_schedule",
+      "name": "Daily Schedule (06:30)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://gatekeeper.skud24.ru/analytics?period=1d&breakdown=provider",
+        "authentication": "genericCredentialType",
+        "genericCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.GATEKEEPER_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get_daily_stats",
+      "name": "Get Daily Statistics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Generate report HTML\nconst stats = $node.get_daily_stats.json;\n\nlet html = `\n<html>\n<body style=\"font-family: Arial, sans-serif;\">\n<h1>Gatekeeper Platform - Daily Report</h1>\n<p>Date: ${new Date().toLocaleDateString()}</p>\n\n<h2>Summary</h2>\n<ul>\n  <li>Total Revenue: ${stats.totalAmount / 100} RUB</li>\n  <li>Total Transactions: ${stats.totalCount}</li>\n  <li>Success Rate: ${stats.successRate.toFixed(2)}%</li>\n  <li>Failed Payments: ${stats.failed}</li>\n</ul>\n\n<h2>By Provider</h2>\n<table style=\"border-collapse: collapse; width: 100%;\">\n<tr style=\"background-color: #f0f0f0;\">\n  <th style=\"border: 1px solid #ddd; padding: 8px;\">Provider</th>\n  <th style=\"border: 1px solid #ddd; padding: 8px;\">Count</th>\n  <th style=\"border: 1px solid #ddd; padding: 8px;\">Amount</th>\n</tr>\n`;\n\nfor (const [provider, data] of Object.entries(stats.byProvider || {})) {\n  html += `\n<tr>\n  <td style=\"border: 1px solid #ddd; padding: 8px;\">${provider}</td>\n  <td style=\"border: 1px solid #ddd; padding: 8px;\">${data.count}</td>\n  <td style=\"border: 1px solid #ddd; padding: 8px;\">${(data.amount / 100).toFixed(2)} RUB</td>\n</tr>\n  `;\n}\n\nhtml += `\n</table>\n\n<p style=\"margin-top: 20px; color: #666; font-size: 12px;\">\nGenerated automatically by Gatekeeper Platform\n</p>\n</body>\n</html>\n`;\n\nreturn [{ html, timestamp: new Date().toISOString() }];"
+      },
+      "id": "generate_report_html",
+      "name": "Generate Report HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "host": "{{ $env.SMTP_HOST }}",
+        "port": "{{ $env.SMTP_PORT }}",
+        "email": "{{ $env.SMTP_USER }}",
+        "password": "{{ $env.SMTP_PASS }}",
+        "toEmail": "{{ $env.ADMIN_EMAIL }}",
+        "subject": "Gatekeeper Daily Report - {{ new Date().toLocaleDateString() }}",
+        "emailType": "html",
+        "htmlEmail": "={{ $node.generate_report_html.json.html }}",
+        "options": {}
+      },
+      "id": "send_report_email",
+      "name": "Send Report Email",
+      "type": "n8n-nodes-base.sendGrid",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://gatekeeper.skud24.ru/analytics/archive",
+        "authentication": "genericCredentialType",
+        "genericCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.GATEKEEPER_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "report",
+              "value": "={{ $node.generate_report_html.json.html }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $node.generate_report_html.json.timestamp }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "archive_report",
+      "name": "Archive Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "daily_schedule": {
+      "main": [
+        [
+          {
+            "node": "get_daily_stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_daily_stats": {
+      "main": [
+        [
+          {
+            "node": "generate_report_html",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "generate_report_html": {
+      "main": [
+        [
+          {
+            "node": "send_report_email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "archive_report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "tags": ["analytics", "reports", "daily"]
+}

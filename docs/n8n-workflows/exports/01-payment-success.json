@@ -1,0 +1,180 @@
+{
+  "name": "Payment Success Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "payment.succeeded",
+        "options": {}
+      },
+      "id": "webhook_trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://gatekeeper.skud24.ru/payments/{{ $node.webhook_trigger.json.paymentId }}",
+        "authentication": "genericCredentialType",
+        "genericCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.GATEKEEPER_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get_payment",
+      "name": "Get Payment Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://gatekeeper.skud24.ru/subscriptions/{{ $node.webhook_trigger.json.subscriptionId }}/activate",
+        "method": "POST",
+        "authentication": "genericCredentialType",
+        "genericCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.GATEKEEPER_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "activate_subscription",
+      "name": "Activate Subscription",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "host": "{{ $env.SMTP_HOST }}",
+        "port": "{{ $env.SMTP_PORT }}",
+        "email": "{{ $env.SMTP_USER }}",
+        "password": "{{ $env.SMTP_PASS }}",
+        "toEmail": "={{ $node.get_payment.json.email || 'support@gatekeeper.ru' }}",
+        "subject": "Payment Received - Welcome!",
+        "emailType": "html",
+        "htmlEmail": "<h1>Payment Confirmed</h1><p>Your subscription is now active! Access your channels immediately.</p><p>Invoice ID: {{ $node.get_payment.json.id }}</p>",
+        "options": {}
+      },
+      "id": "send_welcome_email",
+      "name": "Send Welcome Email",
+      "type": "n8n-nodes-base.sendGrid",
+      "typeVersion": 1,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://gatekeeper.skud24.ru/analytics/log",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.GATEKEEPER_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event",
+              "value": "payment.succeeded"
+            },
+            {
+              "name": "subscriptionId",
+              "value": "={{ $node.webhook_trigger.json.subscriptionId }}"
+            },
+            {
+              "name": "amount",
+              "value": "={{ $node.get_payment.json.amount }}"
+            },
+            {
+              "name": "provider",
+              "value": "={{ $node.get_payment.json.provider }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log_analytics",
+      "name": "Log to Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 400]
+    }
+  ],
+  "connections": {
+    "webhook_trigger": {
+      "main": [
+        [
+          {
+            "node": "get_payment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_payment": {
+      "main": [
+        [
+          {
+            "node": "activate_subscription",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "activate_subscription": {
+      "main": [
+        [
+          {
+            "node": "send_welcome_email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "log_analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionData": {
+      "lastExecution": {
+        "data": {
+          "resultData": {
+            "runData": {}
+          }
+        },
+        "finished": true
+      }
+    }
+  },
+  "staticData": null,
+  "tags": ["payments", "subscriptions"]
+}

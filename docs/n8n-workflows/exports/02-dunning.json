@@ -1,0 +1,254 @@
+{
+  "name": "Dunning Workflow - Retry Failed Payments",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerType": "every",
+        "unit": "hours",
+        "value": 24,
+        "options": {}
+      },
+      "id": "schedule_trigger",
+      "name": "Schedule Trigger (Daily 06:00)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://gatekeeper.skud24.ru/subscriptions?status=grace_period&limit=100",
+        "authentication": "genericCredentialType",
+        "genericCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.GATEKEEPER_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get_grace_subscriptions",
+      "name": "Get Grace Period Subscriptions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "loopOver": "={{ $node.get_grace_subscriptions.json.data }}",
+        "options": {}
+      },
+      "id": "loop_subscriptions",
+      "name": "Loop Through Subscriptions",
+      "type": "n8n-nodes-base.loop",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://gatekeeper.skud24.ru/payments/{{ $item().lastPaymentId }}/retry",
+        "authentication": "genericCredentialType",
+        "genericCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.GATEKEEPER_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "retry_payment",
+      "name": "Retry Payment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": [
+            {
+              "condition": "if",
+              "value1": "={{ $node.retry_payment.json.status }}",
+              "value2": "succeeded",
+              "operation": "equals"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check_retry_success",
+      "name": "Check Retry Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://gatekeeper.skud24.ru/subscriptions/{{ $item().id }}/activate",
+        "authentication": "genericCredentialType",
+        "genericCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.GATEKEEPER_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "reactivate_subscription",
+      "name": "Reactivate Subscription",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 200]
+    },
+    {
+      "parameters": {
+        "host": "{{ $env.SMTP_HOST }}",
+        "port": "{{ $env.SMTP_PORT }}",
+        "email": "{{ $env.SMTP_USER }}",
+        "password": "{{ $env.SMTP_PASS }}",
+        "toEmail": "={{ $item().email }}",
+        "subject": "Payment Recovered - Subscription Restored",
+        "emailType": "html",
+        "htmlEmail": "<h1>Payment Successful</h1><p>Your payment retry was successful! Your subscription has been restored.</p>",
+        "options": {}
+      },
+      "id": "send_recovery_email",
+      "name": "Send Recovery Email",
+      "type": "n8n-nodes-base.sendGrid",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "host": "{{ $env.SMTP_HOST }}",
+        "port": "{{ $env.SMTP_PORT }}",
+        "email": "{{ $env.SMTP_USER }}",
+        "password": "{{ $env.SMTP_PASS }}",
+        "toEmail": "={{ $item().email }}",
+        "subject": "Payment Failed - Action Required",
+        "emailType": "html",
+        "htmlEmail": "<h1>Payment Failed</h1><p>We attempted to charge your payment method but it failed. Please update your payment method to avoid service suspension.</p><p>Subscription ID: {{ $item().id }}</p>",
+        "options": {}
+      },
+      "id": "send_failure_notice",
+      "name": "Send Failure Notice",
+      "type": "n8n-nodes-base.sendGrid",
+      "typeVersion": 1,
+      "position": [1250, 450]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://gatekeeper.skud24.ru/subscriptions/{{ $item().id }}/deactivate",
+        "authentication": "genericCredentialType",
+        "genericCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.GATEKEEPER_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "deactivate_if_expired",
+      "name": "Deactivate If Expired",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 600]
+    }
+  ],
+  "connections": {
+    "schedule_trigger": {
+      "main": [
+        [
+          {
+            "node": "get_grace_subscriptions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_grace_subscriptions": {
+      "main": [
+        [
+          {
+            "node": "loop_subscriptions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "loop_subscriptions": {
+      "main": [
+        [
+          {
+            "node": "retry_payment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "retry_payment": {
+      "main": [
+        [
+          {
+            "node": "check_retry_success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check_retry_success": {
+      "main": [
+        [
+          {
+            "node": "reactivate_subscription",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "send_recovery_email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "send_failure_notice",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "deactivate_if_expired",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "tags": ["payments", "dunning", "automation"]
+}
