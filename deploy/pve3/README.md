@@ -74,3 +74,28 @@ Traefik подхватит лейблы и выпустит TLS по HTTP-01. П
 `PUBLIC_API_URL=https://gatekeeper.skud24.ru` → при `POST /v1/bots` бот получит
 webhook `https://gatekeeper.skud24.ru/tg/webhook/<botId>`, который через Traefik →
 gatekeeper-proxy → API. Ничего дополнительно настраивать не нужно.
+
+## Реальные заметки по развёртыванию (пройдено)
+
+Что отличалось от идеального пути и как решалось в этой лабе:
+
+- **Egress лабы ломает TLS к download.proxmox.com** (перехват/пересборка сертификата).
+  Поэтому шаблон LXC не качали из интернета, а скопировали с соседнего узла кластера:
+  `scp root@192.168.1.20:/var/lib/vz/template/cache/debian-12-standard_12.12-1_amd64.tar.zst /var/lib/vz/template/cache/`.
+  Registry (docker/npm/github) при этом с валидными сертификатами — сборка/пул работают.
+- **IPv6 без маршрута вешает apt/pveam.** `deb.debian.org` резолвится в IPv6, а у LXC
+  только IPv4 → apt висит. Решение: `apt-get -o Acquire::ForceIPv4=true ...` и строка
+  `precedence ::ffff:0:0/96 100` в `/etc/gai.conf`. Docker/Node сами быстро откатываются на IPv4.
+- **Docker:** ставили Debian-пакет `docker.io` (apt по http + GPG, иммунен к TLS-перехвату).
+  Compose v2 (`docker compose`) в Debian нет — плагин скачали с GitHub в
+  `/usr/local/lib/docker/cli-plugins/docker-compose`. Сборка — legacy-билдером
+  (`DOCKER_BUILDKIT=0`), т.к. buildx в `docker.io` не входит.
+- **Секреты `.env`** генерируются прямо в LXC (`openssl rand`). Посмотреть/забрать:
+  `pct exec 150 -- cat /opt/gatekeeper-src/gatekeeper/.env`.
+  `N8N_SERVICE_TOKEN` из него нужен для вызовов `/v1/*` (заголовок `Authorization: Bearer`).
+- **`PLATFORM_BOT_TOKEN`** пуст — вписать токен бота платформы и перезапустить `api`,
+  либо подключать боты клиентов через `POST /v1/bots`.
+
+Состояние после развёртывания: LXC 150 (192.168.1.25), контейнеры `pve3-api-1` (:3000),
+`pve3-postgres-1`, `pve3-redis-1`; proxy `gatekeeper-proxy` на .44; внешне —
+`https://gatekeeper.skud24.ru/healthz` → `{"status":"ok","db":true}`.
