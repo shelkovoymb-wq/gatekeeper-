@@ -32,20 +32,19 @@ export class PaymentsService {
       ['robokassa', this.robokassaProvider]
     ])
     
-    this.logger.log(`Initialized payment providers: ${Array.from(this.providers.keys()).join(', ')}`)
+    this.logger.log(`Payment providers initialized: ${Array.from(this.providers.keys()).join(', ')}`)
   }
 
   async initiatePayment(request: PaymentRequest) {
     const provider = this.providers.get(request.provider)
     if (!provider) {
       throw new BadRequestException(
-        `Unsupported payment provider: ${request.provider}. Supported: ${Array.from(this.providers.keys()).join(', ')}`
+        `Unsupported provider: ${request.provider}. Supported: ${Array.from(this.providers.keys()).join(', ')}`
       )
     }
 
     const { url, paymentId } = await provider.initiate(request)
 
-    // Сохраняем платёж в БД
     await db.insert(payments).values({
       clientId: request.clientId,
       subscriberId: request.subscriberId,
@@ -53,14 +52,14 @@ export class PaymentsService {
       provider: request.provider,
       providerPaymentId: paymentId,
       amount: request.amount,
-      currency: request.currency,
+      currency: request.currency || 'RUB',
       status: PaymentStatus.PENDING,
       metadata: request.metadata || {},
       createdAt: new Date()
     })
 
     this.logger.log(`Payment initiated: ${paymentId} (${request.provider}) for subscription ${request.subscriptionId}`)
-    return { paymentId, url }
+    return { paymentId, url, status: 'pending' }
   }
 
   async handleWebhook(provider: string, payload: any) {
@@ -73,18 +72,17 @@ export class PaymentsService {
     try {
       webhook = providerInstance.verify(payload)
     } catch (error) {
-      this.logger.error(`Webhook verification failed for ${provider}: ${error.message}`)
+      this.logger.error(`Webhook verification failed for ${provider}: ${(error as Error).message}`)
       throw new BadRequestException(`Invalid webhook signature or format`)
     }
     
-    // Найдём платёж в БД
     const [payment] = await db
       .select()
       .from(payments)
       .where(
         and(
           eq(payments.providerPaymentId, webhook.providerPaymentId),
-          eq(payments.provider, webhook.provider)
+          eq(payments.provider, webhook.provider as any)
         )
       )
 
@@ -92,28 +90,17 @@ export class PaymentsService {
       throw new NotFoundException(`Payment not found: ${webhook.providerPaymentId}`)
     }
 
-    // Обновим статус
     await db
       .update(payments)
       .set({
-        status: webhook.status,
+        status: webhook.status as any,
         metadata: webhook.data,
         updatedAt: new Date()
       })
       .where(eq(payments.id, payment.id))
 
     this.logger.log(`Payment ${webhook.status}: ${webhook.providerPaymentId} from ${provider}`)
-
-    // Отправим event в outbox для n8n (подписка активируется)
-    if (webhook.status === PaymentStatus.SUCCEEDED) {
-      // TODO: await this.eventsService.outbox('subscription.payment.succeeded', {
-      //   subscriptionId: payment.subscriptionId,
-      //   paymentId: payment.id,
-      //   amount: payment.amount
-      // })
-    }
-
-    return payment
+    return { id: payment.id, status: webhook.status, updatedAt: new Date() }
   }
 
   async getPayment(paymentId: string) {
@@ -138,13 +125,58 @@ export class PaymentsService {
       .offset(offset)
   }
 
-  async getPaymentStatistics(clientId: string) {
-    // TODO: Implement with aggregation queries
-    return {
-      totalSucceeded: 0,
-      totalFailed: 0,
-      totalRefunded: 0,
-      totalAmount: 0
+  async refundPayment(paymentId: string, amount?: number, reason?: string) {
+    const [payment] = await db
+      .select()
+      .from(payments)
+      .where(eq(payments.providerPaymentId, paymentId))
+
+    if (!payment) {
+      throw new NotFoundException(`Payment not found: ${paymentId}`)
     }
+
+    if (payment.status !== PaymentStatus.SUCCEEDED) {
+      throw new BadRequestException(`Cannot refund payment with status: ${payment.status}`)
+    }
+
+    const provider = this.providers.get(payment.provider)
+    if (!provider) {
+      throw new BadRequestException(`Provider not found: ${payment.provider}`)
+    }
+
+    const success = await provider.refund(paymentId, amount)
+    
+    if (success) {
+      await db
+        .update(payments)
+        .set({
+          status: PaymentStatus.REFUNDED,
+          updatedAt: new Date()
+        })
+        .where(eq(payments.id, payment.id))
+
+      this.logger.log(`Refund processed: ${paymentId} (${amount || 'full'})`)
+    }
+
+    return { id: payment.id, status: success ? 'refunded' : 'failed', refundedAt: new Date() }
+  }
+
+  async getPaymentStatistics(clientId: string) {
+    const allPayments = await db
+      .select()
+      .from(payments)
+      .where(eq(payments.clientId, clientId))
+
+    const stats = {
+      totalSucceeded: allPayments.filter(p => p.status === PaymentStatus.SUCCEEDED).length,
+      totalFailed: allPayments.filter(p => p.status === PaymentStatus.FAILED).length,
+      totalRefunded: allPayments.filter(p => p.status === PaymentStatus.REFUNDED).length,
+      totalAmount: allPayments
+        .filter(p => p.status === PaymentStatus.SUCCEEDED)
+        .reduce((sum, p) => sum + p.amount, 0),
+      totalCount: allPayments.length
+    }
+
+    return stats
   }
 }

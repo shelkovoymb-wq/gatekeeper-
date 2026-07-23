@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gatekeeper-postgres
+    environment:
+      POSTGRES_DB: gatekeeper
+      POSTGRES_USER: gatekeeper
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-gatekeeper}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - gatekeeper-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: gatekeeper-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis123}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - gatekeeper-network
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: gatekeeper-api
+    environment:
+      NODE_ENV: production
+      API_PORT: 3000
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-https://gatekeeper.skud24.ru}
+      DATABASE_URL: postgres://gatekeeper:${DB_PASSWORD:-gatekeeper}@postgres:5432/gatekeeper
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379
+      YOOKASSA_SHOP_ID_CLIENT_1: ${YOOKASSA_SHOP_ID:-}
+      YOOKASSA_SECRET_CLIENT_1: ${YOOKASSA_SECRET:-}
+      CLOUDPAYMENTS_PUBLIC_ID_CLIENT_1: ${CLOUDPAYMENTS_PUBLIC_ID:-}
+      CLOUDPAYMENTS_API_SECRET_CLIENT_1: ${CLOUDPAYMENTS_API_SECRET:-}
+      ROBOKASSA_MERCHANT_LOGIN_CLIENT_1: ${ROBOKASSA_MERCHANT_LOGIN:-}
+      ROBOKASSA_PASSWORD1_CLIENT_1: ${ROBOKASSA_PASSWORD1:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "3000:3000"
+    networks:
+      - gatekeeper-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: gatekeeper-web
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://gatekeeper.skud24.ru}
+    depends_on:
+      - api
+    ports:
+      - "3001:3000"
+    networks:
+      - gatekeeper-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  gatekeeper-network:
+    driver: bridge
