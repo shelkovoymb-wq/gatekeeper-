@@ -60,6 +60,23 @@ services:
       - "3000:3000"
     networks: [internal]
 
+  # Next.js админ-панель. BFF-роуты ходят в api по внутренней сети с сервис-токеном.
+  web:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      BACKEND_URL: http://api:3000
+      GATEKEEPER_API_TOKEN: ${N8N_SERVICE_TOKEN}
+    depends_on:
+      - api
+    # Публикуем web на 3001 — gatekeeper-proxy на .44 отдаёт сюда всё, кроме api-путей.
+    ports:
+      - "3001:3000"
+    networks: [internal]
+
 volumes:
   pgdata:
   redisdata:
