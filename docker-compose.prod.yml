@@ -85,3 +85,14 @@ volumes:
 networks:
   gatekeeper-network:
     driver: bridge
+
+  nginx:
+    image: nginx:alpine
+    container_name: gatekeeper-nginx
+    volumes:
+      - ./public:/usr/share/nginx/html:ro
+    ports:
+      - "3001:80"
+    networks:
+      - gatekeeper-network
+    restart: unless-stopped
