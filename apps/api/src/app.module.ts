@@ -4,6 +4,7 @@ import { ConfigModule } from './config/config.module.js'
 import { DbModule } from './db/db.module.js'
 import { CryptoModule } from './common/crypto.module.js'
 import { QueueModule } from './queue/queue.module.js'
+import { AppController } from './app.controller.js'
 import { HealthController } from './health/health.controller.js'
 import { TelegramCoreModule } from './telegram/telegram-core.module.js'
 import { TelegramModule } from './telegram/telegram.module.js'
@@ -45,6 +46,6 @@ import { PaymentsModule } from './payments/payments.module.js'
     PaymentsModule,
     TelegramModule
   ],
-  controllers: [HealthController]
+  controllers: [AppController, HealthController]
 })
 export class AppModule {}
