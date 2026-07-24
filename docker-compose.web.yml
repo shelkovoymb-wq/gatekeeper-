@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  web:
+    image: node:20-alpine
+    container_name: gatekeeper-web
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://gatekeeper.skud24.ru}
+    ports:
+      - "3001:3000"
+    command: sh -c "pnpm install --frozen-lockfile && cd apps/web && pnpm build && pnpm start"
+    networks:
+      - gatekeeper-network
+    restart: unless-stopped
+
+networks:
+  gatekeeper-network:
+    driver: bridge
