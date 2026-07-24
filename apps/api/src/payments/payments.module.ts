@@ -1,10 +1,10 @@
-import { Module } from '@nestjs/common'
-import { PaymentsService } from './payments.service'
-import { PaymentsController } from './payments.controller'
-import { TelegramStarsProvider } from './providers/telegram-stars.provider'
-import { YooKassaProvider } from './providers/yookassa.provider'
-import { CloudPaymentsProvider } from './providers/cloudpayments.provider'
-import { RobokassaProvider } from './providers/robokassa.provider'
+import { Module } from '@nestjs/common';
+import { PaymentsService } from './payments.service.js';
+import { PaymentsController } from './payments.controller.js';
+import { TelegramStarsProvider } from './providers/telegram-stars.provider.js';
+import { YooKassaProvider } from './providers/yookassa.provider.js';
+import { CloudPaymentsProvider } from './providers/cloudpayments.provider.js';
+import { RobokassaProvider } from './providers/robokassa.provider.js';
 
 @Module({
   controllers: [PaymentsController],
@@ -13,8 +13,8 @@ import { RobokassaProvider } from './providers/robokassa.provider'
     TelegramStarsProvider,
     YooKassaProvider,
     CloudPaymentsProvider,
-    RobokassaProvider
+    RobokassaProvider,
   ],
-  exports: [PaymentsService]
+  exports: [PaymentsService],
 })
 export class PaymentsModule {}

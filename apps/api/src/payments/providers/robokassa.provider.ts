@@ -1,79 +1,66 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
-import crypto from 'crypto'
-import { PaymentProvider as IPaymentProvider, PaymentRequest, PaymentStatus, PaymentWebhook } from '../payment.types'
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import crypto from 'node:crypto';
+import {
+  PaymentStatus,
+  type PaymentProviderAdapter,
+  type PaymentRequest,
+  type PaymentWebhook,
+} from '../payment.types.js';
 
 @Injectable()
-export class RobokassaProvider implements IPaymentProvider {
-  private logger = new Logger(RobokassaProvider.name)
-  name = 'robokassa' as any
-  private readonly apiUrl = 'https://auth.robokassa.ru/Merchant/WebService/GetMerchantBalance/'
-  private readonly checkoutUrl = 'https://auth.robokassa.ru/Merchant/Index.aspx'
+export class RobokassaProvider implements PaymentProviderAdapter {
+  private readonly logger = new Logger(RobokassaProvider.name);
+  name = 'robokassa';
+  private readonly checkoutUrl = 'https://auth.robokassa.ru/Merchant/Index.aspx';
 
-  constructor(private config: ConfigService) {}
-
-  private getMD5Hash(str: string): string {
-    return crypto.createHash('md5').update(str).digest('hex')
+  private md5(str: string): string {
+    return crypto.createHash('md5').update(str).digest('hex');
   }
 
-  async initiate(request: PaymentRequest): Promise<{ url: string; paymentId: string }> {
-    const merchantLogin = this.config.get(`ROBOKASSA_MERCHANT_LOGIN_${request.clientId.toUpperCase()}`)
-    const password1 = this.config.get(`ROBOKASSA_PASSWORD1_${request.clientId.toUpperCase()}`)
-
+  async initiate(request: PaymentRequest): Promise<{ url: string | null; paymentId: string }> {
+    const merchantLogin = process.env[`ROBOKASSA_MERCHANT_LOGIN_${request.clientId.toUpperCase()}`];
+    const password1 = process.env[`ROBOKASSA_PASSWORD1_${request.clientId.toUpperCase()}`];
     if (!merchantLogin || !password1) {
-      throw new BadRequestException(`Robokassa not configured for client ${request.clientId}`)
+      throw new BadRequestException(`Robokassa not configured for client ${request.clientId}`);
     }
 
-    const invoiceId = `inv_${Date.now()}`
-    const sum = (request.amount / 100).toFixed(2)
+    const invoiceId = `inv_${Date.now()}`;
+    const sum = (request.amount / 100).toFixed(2);
+    const signature = this.md5(`${merchantLogin}:${sum}:${invoiceId}:${password1}`);
+    const email = (request.metadata?.email as string) ?? '';
 
-    // Robokassa: SignatureValue = MD5(MerchantLogin:Sum:InvoiceID:Password1)
-    const signatureData = `${merchantLogin}:${sum}:${invoiceId}:${password1}`
-    const signature = this.getMD5Hash(signatureData)
-
-    const checkoutParams = new URLSearchParams({
+    const params = new URLSearchParams({
       MerchantLogin: merchantLogin,
       Sum: sum,
       InvoiceID: invoiceId,
       Description: request.description,
       SignatureValue: signature,
-      Email: request.metadata?.email || '',
+      Email: email,
       Encoding: 'utf-8',
-      Culture: 'ru'
-    })
+      Culture: 'ru',
+    });
 
-    return {
-      url: `${this.checkoutUrl}?${checkoutParams.toString()}`,
-      paymentId: invoiceId
-    }
+    return { url: `${this.checkoutUrl}?${params.toString()}`, paymentId: invoiceId };
   }
 
-  verify(payload: any): PaymentWebhook {
-    // Robokassa POST /Result webhook с параметрами:
-    // MerchantLogin, Sum, InvoiceID, SignatureValue, InvId, OperationId, Status
-    // https://docs.robokassa.ru/
-
+  verify(payload: unknown): PaymentWebhook {
+    const p = payload as Record<string, string>;
     return {
       provider: 'robokassa',
-      providerPaymentId: payload.OperationId || payload.InvoiceID,
-      status: payload.Status === 'received' || payload.Status === 'confirmed' 
-        ? PaymentStatus.SUCCEEDED 
-        : PaymentStatus.FAILED,
-      amount: Math.round(parseFloat(payload.Sum) * 100),
+      providerPaymentId: p.OperationId || p.InvoiceID,
+      status:
+        p.Status === 'received' || p.Status === 'confirmed'
+          ? PaymentStatus.SUCCEEDED
+          : PaymentStatus.FAILED,
+      amount: Math.round(parseFloat(p.Sum) * 100),
       currency: 'RUB',
       timestamp: Date.now(),
-      data: {
-        invoice_id: payload.InvoiceID,
-        operation_id: payload.OperationId,
-        status: payload.Status
-      }
-    }
+      data: { invoice_id: p.InvoiceID, operation_id: p.OperationId, status: p.Status },
+    };
   }
 
-  async refund(paymentId: string, amount?: number): Promise<boolean> {
-    // Robokassa не поддерживает автоматические рефанды через API
-    // Требует ручного обращения к поддержке
-    this.logger.warn(`Robokassa refund: ${paymentId} requires manual support request`)
-    return false
+  async refund(paymentId: string, _amount?: number): Promise<boolean> {
+    this.logger.warn(`Robokassa refund: ${paymentId} requires manual support request`);
+    return false;
   }
 }

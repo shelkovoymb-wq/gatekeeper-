@@ -1,182 +1,179 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
-import { db } from '../db'
-import { payments, paymentConfigs } from '../db/schema'
-import { eq, and } from 'drizzle-orm'
-import { PaymentProvider as IPaymentProvider, PaymentRequest, PaymentStatus } from './payment.types'
-import { TelegramStarsProvider } from './providers/telegram-stars.provider'
-import { YooKassaProvider } from './providers/yookassa.provider'
-import { CloudPaymentsProvider } from './providers/cloudpayments.provider'
-import { RobokassaProvider } from './providers/robokassa.provider'
+import {
+  Inject,
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
+import { and, eq } from 'drizzle-orm';
+import { DB, type Database } from '../db/db.module.js';
+import { payments } from '../db/schema.js';
+import {
+  PaymentStatus,
+  type PaymentProviderAdapter,
+  type PaymentRequest,
+} from './payment.types.js';
+import { TelegramStarsProvider } from './providers/telegram-stars.provider.js';
+import { YooKassaProvider } from './providers/yookassa.provider.js';
+import { CloudPaymentsProvider } from './providers/cloudpayments.provider.js';
+import { RobokassaProvider } from './providers/robokassa.provider.js';
 
 @Injectable()
 export class PaymentsService {
-  private logger = new Logger(PaymentsService.name)
-  private providers: Map<string, IPaymentProvider>
+  private readonly logger = new Logger(PaymentsService.name);
+  private readonly providers: Map<string, PaymentProviderAdapter>;
 
   constructor(
-    private config: ConfigService,
-    private starsProvider: TelegramStarsProvider,
-    private yookassaProvider: YooKassaProvider,
-    private cloudpaymentsProvider: CloudPaymentsProvider,
-    private robokassaProvider: RobokassaProvider
+    @Inject(DB) private readonly db: Database,
+    starsProvider: TelegramStarsProvider,
+    yookassaProvider: YooKassaProvider,
+    cloudpaymentsProvider: CloudPaymentsProvider,
+    robokassaProvider: RobokassaProvider,
   ) {
-    this.initializeProviders()
-  }
-
-  private initializeProviders() {
-    this.providers = new Map([
-      ['stars', this.starsProvider],
-      ['yookassa', this.yookassaProvider],
-      ['cloudpayments', this.cloudpaymentsProvider],
-      ['robokassa', this.robokassaProvider]
-    ])
-    
-    this.logger.log(`Payment providers initialized: ${Array.from(this.providers.keys()).join(', ')}`)
+    this.providers = new Map<string, PaymentProviderAdapter>([
+      ['stars', starsProvider],
+      ['yookassa', yookassaProvider],
+      ['cloudpayments', cloudpaymentsProvider],
+      ['robokassa', robokassaProvider],
+    ]);
+    this.logger.log(
+      `Payment providers initialized: ${Array.from(this.providers.keys()).join(', ')}`,
+    );
   }
 
   async initiatePayment(request: PaymentRequest) {
-    const provider = this.providers.get(request.provider)
+    const provider = this.providers.get(request.provider);
     if (!provider) {
       throw new BadRequestException(
-        `Unsupported provider: ${request.provider}. Supported: ${Array.from(this.providers.keys()).join(', ')}`
-      )
+        `Unsupported provider: ${request.provider}. Supported: ${Array.from(this.providers.keys()).join(', ')}`,
+      );
     }
 
-    const { url, paymentId } = await provider.initiate(request)
+    const { url, paymentId } = await provider.initiate(request);
 
-    await db.insert(payments).values({
+    await this.db.insert(payments).values({
       clientId: request.clientId,
-      subscriberId: request.subscriberId,
-      subscriptionId: request.subscriptionId,
+      subscriptionId: request.subscriptionId ?? null,
+      subscriberId: request.subscriberId ?? null,
       provider: request.provider,
       providerPaymentId: paymentId,
-      amount: request.amount,
+      amount: String(request.amount),
       currency: request.currency || 'RUB',
       status: PaymentStatus.PENDING,
-      metadata: request.metadata || {},
-      createdAt: new Date()
-    })
+      metadata: request.metadata ?? {},
+    });
 
-    this.logger.log(`Payment initiated: ${paymentId} (${request.provider}) for subscription ${request.subscriptionId}`)
-    return { paymentId, url, status: 'pending' }
+    this.logger.log(
+      `Payment initiated: ${paymentId} (${request.provider}) for subscription ${request.subscriptionId ?? '-'}`,
+    );
+    return { paymentId, url, status: PaymentStatus.PENDING };
   }
 
-  async handleWebhook(provider: string, payload: any) {
-    const providerInstance = this.providers.get(provider)
-    if (!providerInstance) {
-      throw new BadRequestException(`Unknown provider: ${provider}`)
+  async handleWebhook(providerName: string, payload: unknown) {
+    const provider = this.providers.get(providerName);
+    if (!provider) {
+      throw new BadRequestException(`Unknown provider: ${providerName}`);
     }
 
-    let webhook
+    let webhook;
     try {
-      webhook = providerInstance.verify(payload)
+      webhook = provider.verify(payload);
     } catch (error) {
-      this.logger.error(`Webhook verification failed for ${provider}: ${(error as Error).message}`)
-      throw new BadRequestException(`Invalid webhook signature or format`)
+      this.logger.error(
+        `Webhook verification failed for ${providerName}: ${(error as Error).message}`,
+      );
+      throw new BadRequestException('Invalid webhook signature or format');
     }
-    
-    const [payment] = await db
+
+    const [payment] = await this.db
       .select()
       .from(payments)
       .where(
         and(
           eq(payments.providerPaymentId, webhook.providerPaymentId),
-          eq(payments.provider, webhook.provider as any)
-        )
+          eq(payments.provider, webhook.provider),
+        ),
       )
+      .limit(1);
 
     if (!payment) {
-      throw new NotFoundException(`Payment not found: ${webhook.providerPaymentId}`)
+      throw new NotFoundException(`Payment not found: ${webhook.providerPaymentId}`);
     }
 
-    await db
+    await this.db
       .update(payments)
-      .set({
-        status: webhook.status as any,
-        metadata: webhook.data,
-        updatedAt: new Date()
-      })
-      .where(eq(payments.id, payment.id))
+      .set({ status: webhook.status, metadata: webhook.data, updatedAt: new Date() })
+      .where(eq(payments.id, payment.id));
 
-    this.logger.log(`Payment ${webhook.status}: ${webhook.providerPaymentId} from ${provider}`)
-    return { id: payment.id, status: webhook.status, updatedAt: new Date() }
+    this.logger.log(
+      `Payment ${webhook.status}: ${webhook.providerPaymentId} from ${providerName}`,
+    );
+    return { id: payment.id, status: webhook.status, updatedAt: new Date() };
   }
 
   async getPayment(paymentId: string) {
-    const [payment] = await db
+    const [payment] = await this.db
       .select()
       .from(payments)
       .where(eq(payments.providerPaymentId, paymentId))
-
-    if (!payment) {
-      throw new NotFoundException(`Payment not found: ${paymentId}`)
-    }
-
-    return payment
+      .limit(1);
+    if (!payment) throw new NotFoundException(`Payment not found: ${paymentId}`);
+    return payment;
   }
 
   async listClientPayments(clientId: string, limit = 50, offset = 0) {
-    return db
+    return this.db
       .select()
       .from(payments)
       .where(eq(payments.clientId, clientId))
       .limit(limit)
-      .offset(offset)
+      .offset(offset);
   }
 
-  async refundPayment(paymentId: string, amount?: number, reason?: string) {
-    const [payment] = await db
+  async refundPayment(paymentId: string, amount?: number, _reason?: string) {
+    const [payment] = await this.db
       .select()
       .from(payments)
       .where(eq(payments.providerPaymentId, paymentId))
-
-    if (!payment) {
-      throw new NotFoundException(`Payment not found: ${paymentId}`)
-    }
+      .limit(1);
+    if (!payment) throw new NotFoundException(`Payment not found: ${paymentId}`);
 
     if (payment.status !== PaymentStatus.SUCCEEDED) {
-      throw new BadRequestException(`Cannot refund payment with status: ${payment.status}`)
+      throw new BadRequestException(
+        `Cannot refund payment with status: ${payment.status}`,
+      );
     }
 
-    const provider = this.providers.get(payment.provider)
+    const provider = this.providers.get(payment.provider);
     if (!provider) {
-      throw new BadRequestException(`Provider not found: ${payment.provider}`)
+      throw new BadRequestException(`Provider not found: ${payment.provider}`);
     }
 
-    const success = await provider.refund(paymentId, amount)
-    
+    const success = await provider.refund(paymentId, amount);
     if (success) {
-      await db
+      await this.db
         .update(payments)
-        .set({
-          status: PaymentStatus.REFUNDED,
-          updatedAt: new Date()
-        })
-        .where(eq(payments.id, payment.id))
-
-      this.logger.log(`Refund processed: ${paymentId} (${amount || 'full'})`)
+        .set({ status: PaymentStatus.REFUNDED, updatedAt: new Date() })
+        .where(eq(payments.id, payment.id));
+      this.logger.log(`Refund processed: ${paymentId} (${amount ?? 'full'})`);
     }
-
-    return { id: payment.id, status: success ? 'refunded' : 'failed', refundedAt: new Date() }
+    return { id: payment.id, status: success ? 'refunded' : 'failed', refundedAt: new Date() };
   }
 
   async getPaymentStatistics(clientId: string) {
-    const allPayments = await db
+    const rows = await this.db
       .select()
       .from(payments)
-      .where(eq(payments.clientId, clientId))
+      .where(eq(payments.clientId, clientId));
 
-    const stats = {
-      totalSucceeded: allPayments.filter(p => p.status === PaymentStatus.SUCCEEDED).length,
-      totalFailed: allPayments.filter(p => p.status === PaymentStatus.FAILED).length,
-      totalRefunded: allPayments.filter(p => p.status === PaymentStatus.REFUNDED).length,
-      totalAmount: allPayments
-        .filter(p => p.status === PaymentStatus.SUCCEEDED)
-        .reduce((sum, p) => sum + p.amount, 0),
-      totalCount: allPayments.length
-    }
-
-    return stats
+    return {
+      totalSucceeded: rows.filter((p) => p.status === PaymentStatus.SUCCEEDED).length,
+      totalFailed: rows.filter((p) => p.status === PaymentStatus.FAILED).length,
+      totalRefunded: rows.filter((p) => p.status === PaymentStatus.REFUNDED).length,
+      totalAmount: rows
+        .filter((p) => p.status === PaymentStatus.SUCCEEDED)
+        .reduce((sum, p) => sum + Number(p.amount), 0),
+      totalCount: rows.length,
+    };
   }
 }

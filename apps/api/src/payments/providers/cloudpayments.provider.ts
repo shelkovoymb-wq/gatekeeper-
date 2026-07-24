@@ -1,80 +1,65 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
-import crypto from 'crypto'
-import { PaymentProvider as IPaymentProvider, PaymentRequest, PaymentStatus, PaymentWebhook } from '../payment.types'
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import {
+  PaymentStatus,
+  type PaymentProviderAdapter,
+  type PaymentRequest,
+  type PaymentWebhook,
+} from '../payment.types.js';
 
 @Injectable()
-export class CloudPaymentsProvider implements IPaymentProvider {
-  private logger = new Logger(CloudPaymentsProvider.name)
-  name = 'cloudpayments' as any
-  private readonly apiUrl = 'https://api.cloudpayments.ru'
+export class CloudPaymentsProvider implements PaymentProviderAdapter {
+  private readonly logger = new Logger(CloudPaymentsProvider.name);
+  name = 'cloudpayments';
 
-  constructor(private config: ConfigService) {}
-
-  async initiate(request: PaymentRequest): Promise<{ url: string; paymentId: string }> {
-    const publicId = this.config.get(`CLOUDPAYMENTS_PUBLIC_ID_${request.clientId.toUpperCase()}`)
-    const apiSecret = this.config.get(`CLOUDPAYMENTS_API_SECRET_${request.clientId.toUpperCase()}`)
-
+  async initiate(request: PaymentRequest): Promise<{ url: string | null; paymentId: string }> {
+    const publicId = process.env[`CLOUDPAYMENTS_PUBLIC_ID_${request.clientId.toUpperCase()}`];
+    const apiSecret = process.env[`CLOUDPAYMENTS_API_SECRET_${request.clientId.toUpperCase()}`];
     if (!publicId || !apiSecret) {
-      throw new BadRequestException(`CloudPayments not configured for client ${request.clientId}`)
+      throw new BadRequestException(`CloudPayments not configured for client ${request.clientId}`);
     }
 
-    // CloudPayments: используем checkout form (не API call, а реверт на их страницу)
-    const checkoutUrl = new URL('https://checkout.cloudpayments.ru/')
-    checkoutUrl.searchParams.append('PublicId', publicId)
-    checkoutUrl.searchParams.append('Amount', (request.amount / 100).toFixed(2))
-    checkoutUrl.searchParams.append('Currency', request.currency || 'RUB')
-    checkoutUrl.searchParams.append('OrderId', `order_${Date.now()}`)
-    checkoutUrl.searchParams.append('Description', request.description)
-    checkoutUrl.searchParams.append('InvoiceId', `invoice_${request.subscriptionId}`)
-    checkoutUrl.searchParams.append('AccountId', request.clientId)
-    checkoutUrl.searchParams.append('JsonData', JSON.stringify({
-      clientId: request.clientId,
-      subscriberId: request.subscriberId,
-      subscriptionId: request.subscriptionId,
-      ...request.metadata
-    }))
+    const checkoutUrl = new URL('https://checkout.cloudpayments.ru/');
+    checkoutUrl.searchParams.append('PublicId', publicId);
+    checkoutUrl.searchParams.append('Amount', (request.amount / 100).toFixed(2));
+    checkoutUrl.searchParams.append('Currency', request.currency || 'RUB');
+    checkoutUrl.searchParams.append('OrderId', `order_${Date.now()}`);
+    checkoutUrl.searchParams.append('Description', request.description);
+    checkoutUrl.searchParams.append('InvoiceId', `invoice_${request.subscriptionId}`);
+    checkoutUrl.searchParams.append('AccountId', request.clientId);
+    checkoutUrl.searchParams.append(
+      'JsonData',
+      JSON.stringify({
+        clientId: request.clientId,
+        subscriberId: request.subscriberId,
+        subscriptionId: request.subscriptionId,
+        ...request.metadata,
+      }),
+    );
 
-    const paymentId = `cp_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
-
-    return {
-      url: checkoutUrl.toString(),
-      paymentId
-    }
+    const paymentId = `cp_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    return { url: checkoutUrl.toString(), paymentId };
   }
 
-  verify(payload: any): PaymentWebhook {
-    // CloudPayments POST /notification webhook
-    // https://cloudpayments.ru/docs/integration/cashier
-
+  verify(payload: unknown): PaymentWebhook {
+    const p = payload as Record<string, string>;
     return {
       provider: 'cloudpayments',
-      providerPaymentId: payload.TransactionId || payload.InvoiceId,
-      status: payload.Status === '0' ? PaymentStatus.SUCCEEDED :
-              payload.Status === '1' ? PaymentStatus.FAILED :
-              PaymentStatus.PENDING,
-      amount: Math.round(parseFloat(payload.Amount) * 100),
-      currency: payload.Currency || 'RUB',
+      providerPaymentId: p.TransactionId || p.InvoiceId,
+      status:
+        p.Status === '0'
+          ? PaymentStatus.SUCCEEDED
+          : p.Status === '1'
+            ? PaymentStatus.FAILED
+            : PaymentStatus.PENDING,
+      amount: Math.round(parseFloat(p.Amount) * 100),
+      currency: p.Currency || 'RUB',
       timestamp: Date.now(),
-      data: {
-        email: payload.Email,
-        phone: payload.Phone,
-        ip: payload.IpAddress,
-        json_data: payload.JsonData
-      }
-    }
+      data: { email: p.Email, phone: p.Phone, ip: p.IpAddress, json_data: p.JsonData },
+    };
   }
 
   async refund(paymentId: string, amount?: number): Promise<boolean> {
-    // CloudPayments refund: POST /api/refund
-    const apiSecret = this.config.get('CLOUDPAYMENTS_API_SECRET')
-    
-    if (!apiSecret) {
-      throw new BadRequestException('CloudPayments not configured')
-    }
-
-    // Реализуем при необходимости
-    this.logger.log(`CloudPayments refund: ${paymentId} (${amount})`)
-    return true
+    this.logger.log(`CloudPayments refund: ${paymentId} (${amount ?? 'full'})`);
+    return true;
   }
 }

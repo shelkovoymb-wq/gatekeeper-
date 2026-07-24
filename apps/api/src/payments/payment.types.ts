@@ -2,7 +2,8 @@ export enum PaymentProvider {
   TELEGRAM_STARS = 'stars',
   YOOKASSA = 'yookassa',
   CLOUDPAYMENTS = 'cloudpayments',
-  CRYPTOBOT = 'cryptobot'
+  ROBOKASSA = 'robokassa',
+  CRYPTOBOT = 'cryptobot',
 }
 
 export enum PaymentStatus {
@@ -10,33 +11,34 @@ export enum PaymentStatus {
   SUCCEEDED = 'succeeded',
   FAILED = 'failed',
   CANCELLED = 'cancelled',
-  REFUNDED = 'refunded'
+  REFUNDED = 'refunded',
 }
 
 export interface PaymentRequest {
-  clientId: string
-  subscriberId: string
-  subscriptionId: string
-  amount: number
-  currency: string
-  provider: PaymentProvider
-  description: string
-  metadata?: Record<string, any>
+  clientId: string;
+  subscriberId?: string;
+  subscriptionId?: string;
+  amount: number;
+  currency: string;
+  provider: string;
+  description: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface PaymentWebhook {
-  provider: PaymentProvider
-  providerPaymentId: string
-  status: PaymentStatus
-  amount: number
-  currency: string
-  timestamp: number
-  data: Record<string, any>
+  provider: string;
+  providerPaymentId: string;
+  status: PaymentStatus;
+  amount: number;
+  currency: string;
+  timestamp: number;
+  data: Record<string, unknown>;
 }
 
-export interface PaymentProvider {
-  name: PaymentProvider
-  initiate(request: PaymentRequest): Promise<{ url: string; paymentId: string }>
-  verify(payload: any): PaymentWebhook
-  refund(paymentId: string, amount?: number): Promise<boolean>
+/** Единый интерфейс платёжного провайдера. */
+export interface PaymentProviderAdapter {
+  name: string;
+  initiate(request: PaymentRequest): Promise<{ url: string | null; paymentId: string }>;
+  verify(payload: unknown): PaymentWebhook;
+  refund(paymentId: string, amount?: number): Promise<boolean>;
 }

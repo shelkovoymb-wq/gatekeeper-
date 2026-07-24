@@ -1,5 +1,4 @@
-import { Controller, Get, Res } from '@nestjs/common'
-import { Response } from 'express'
+import { Controller, Get, Header } from '@nestjs/common'
 
 const FRONTEND_HTML = `<!DOCTYPE html>
 <html lang="ru">
@@ -116,12 +115,14 @@ const FRONTEND_HTML = `<!DOCTYPE html>
 @Controller()
 export class AppController {
   @Get('/')
-  getRoot(@Res() res: Response) {
-    res.type('text/html').send(FRONTEND_HTML)
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  getRoot(): string {
+    return FRONTEND_HTML
   }
 
   @Get('/index.html')
-  getIndex(@Res() res: Response) {
-    res.type('text/html').send(FRONTEND_HTML)
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  getIndex(): string {
+    return FRONTEND_HTML
   }
 }

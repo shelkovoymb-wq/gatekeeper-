@@ -253,6 +253,7 @@ export const payments = pgTable(
       .notNull()
       .references(() => clients.id),
     subscriptionId: uuid('subscription_id').references(() => subscriptions.id),
+    subscriberId: uuid('subscriber_id').references(() => subscribers.id),
     provider: text('provider').notNull(),
     providerPaymentId: text('provider_payment_id').notNull(),
     amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
@@ -260,7 +261,9 @@ export const payments = pgTable(
     status: text('status').notNull(), // pending|succeeded|failed|refunded
     kind: text('kind').notNull().default('purchase'), // purchase|renewal|refund
     raw: jsonb('raw'),
+    metadata: jsonb('metadata'),
     createdAt: nowDefault(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     uniqProviderPayment: uniqueIndex('payments_provider_payment_uq').on(
