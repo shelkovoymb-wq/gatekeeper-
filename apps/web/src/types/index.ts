@@ -45,3 +45,6 @@ export interface ApiResponse<T> {
   error?: string
   timestamp: string
 }
+
+// Реэкспорт для обратной совместимости импортов из '@/types'.
+export type { ChatMessage } from './chat'

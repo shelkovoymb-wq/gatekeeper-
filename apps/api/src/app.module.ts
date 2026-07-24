@@ -18,6 +18,7 @@ import { AccessModule } from './access/access.module.js'
 import { EventsModule } from './events/events.module.js'
 import { ReaperModule } from './reaper/reaper.module.js'
 import { PaymentsModule } from './payments/payments.module.js'
+import { AdminModule } from './admin/admin.module.js'
 
 /**
  * Корневой модуль. Фаза 1 (join-request flow): bots, channels, plans,
@@ -44,6 +45,7 @@ import { PaymentsModule } from './payments/payments.module.js'
     EventsModule,
     ReaperModule,
     PaymentsModule,
+    AdminModule,
     TelegramModule
   ],
   controllers: [AppController, HealthController]

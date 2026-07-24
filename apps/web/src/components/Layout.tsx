@@ -43,7 +43,7 @@ export function Layout({ children }: LayoutProps) {
         {/* Navigation */}
         <nav className="space-y-3">
           {navItems.map((item) => {
-            const isActive = pathname.startsWith(item.href)
+            const isActive = pathname?.startsWith(item.href) ?? false
             return (
               <Link
                 key={item.href}

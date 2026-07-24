@@ -45,7 +45,7 @@ export default function ChatPage() {
       <ChatHistory
         messages={messages}
         isLoading={isLoading}
-        messagesEndRef={messagesEndRef}
+        messagesEndRef={messagesEndRef as import('react').RefObject<HTMLDivElement>}
       />
 
       {/* Input */}
