@@ -9,39 +9,32 @@ interface LayoutProps {
 }
 
 const navItems = [
-  { href: '/admin/channels', label: 'Каналы' },
-  { href: '/admin/users', label: 'Пользователи' },
-  { href: '/admin/stats', label: 'Статистика' },
-  { href: '/chat', label: 'Чат' },
+  { href: '/admin/stats', label: 'Обзор', icon: '📊' },
+  { href: '/admin/channels', label: 'Каналы', icon: '📺' },
+  { href: '/admin/users', label: 'Подписчики', icon: '👥' },
+  { href: '/admin/payments', label: 'Платежи', icon: '💳' },
 ]
-
-const icons: Record<string, string> = {
-  'Каналы': '📺',
-  'Пользователи': '👥',
-  'Статистика': '📊',
-  'Чат': '💬',
-}
 
 export function Layout({ children }: LayoutProps) {
   const pathname = usePathname()
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div className="flex min-h-screen bg-slate-950 text-slate-100">
       {/* Sidebar */}
-      <aside className="w-72 bg-gradient-to-b from-slate-800 via-slate-800 to-slate-900 border-r border-slate-700 p-8 shadow-2xl">
+      <aside className="hidden w-72 shrink-0 flex-col border-r border-slate-800 bg-slate-900/60 p-6 backdrop-blur-glass md:flex">
         {/* Logo */}
-        <div className="mb-16">
-          <div className="inline-block p-3 bg-gradient-to-br from-primary-600 via-secondary-600 to-accent-500 rounded-2xl mb-4 shadow-lg">
-            <span className="text-2xl">⚡</span>
+        <div className="mb-10 flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-500 via-secondary-500 to-accent-500 shadow-lg shadow-primary-600/30">
+            <span className="text-xl">🛡️</span>
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">
-            n8nHarness
-          </h1>
-          <p className="text-sm text-slate-400">AI Agent Platform</p>
+          <div>
+            <h1 className="text-lg font-bold leading-tight text-white">Gatekeeper</h1>
+            <p className="text-xs text-slate-400">Платные Telegram-каналы</p>
+          </div>
         </div>
 
         {/* Navigation */}
-        <nav className="space-y-3">
+        <nav className="space-y-1.5">
           {navItems.map((item) => {
             const isActive = pathname?.startsWith(item.href) ?? false
             return (
@@ -49,13 +42,13 @@ export function Layout({ children }: LayoutProps) {
                 key={item.href}
                 href={item.href}
                 className={clsx(
-                  'flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-300',
+                  'flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-standard',
                   isActive
-                    ? 'bg-gradient-to-r from-primary-600 to-secondary-600 text-white shadow-lg shadow-primary-600/50'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                    ? 'bg-gradient-to-r from-primary-600/90 to-secondary-600/90 text-white shadow-lg shadow-primary-600/25'
+                    : 'text-slate-400 hover:bg-slate-800/70 hover:text-white',
                 )}
               >
-                <span className="text-xl">{icons[item.label]}</span>
+                <span className="text-lg">{item.icon}</span>
                 <span>{item.label}</span>
               </Link>
             )
@@ -63,16 +56,25 @@ export function Layout({ children }: LayoutProps) {
         </nav>
 
         {/* Footer */}
-        <div className="absolute bottom-8 left-8 right-8 pt-6 border-t border-slate-700">
-          <p className="text-xs text-slate-500 text-center">
-            v1.0 • Powered by n8n
-          </p>
+        <div className="mt-auto border-t border-slate-800 pt-5">
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <span className="h-2 w-2 rounded-full bg-success shadow-[0_0_8px] shadow-success" />
+            <span>Система работает</span>
+          </div>
+          <p className="mt-2 text-xs text-slate-600">v1.0 · gatekeeper.skud24.ru</p>
         </div>
       </aside>
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">
-        <div className="min-h-screen p-8">{children}</div>
+        {/* Mobile top bar */}
+        <div className="flex items-center gap-3 border-b border-slate-800 bg-slate-900/60 px-6 py-4 backdrop-blur-glass md:hidden">
+          <span className="text-xl">🛡️</span>
+          <span className="font-bold text-white">Gatekeeper</span>
+        </div>
+        <div className="mx-auto min-h-screen w-full max-w-6xl gk-fade-in p-6 md:p-10">
+          {children}
+        </div>
       </main>
     </div>
   )

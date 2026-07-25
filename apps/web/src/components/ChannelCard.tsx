@@ -1,72 +1,67 @@
 import type { Channel } from '@/types'
+import { formatMoney, formatNumber, formatDate } from '@/lib/format'
 
 interface ChannelCardProps {
   channel: Channel
-  onEdit?: (channel: Channel) => void
-  onDelete?: (id: string) => void
 }
 
-export function ChannelCard({ channel, onEdit, onDelete }: ChannelCardProps) {
+export function ChannelCard({ channel }: ChannelCardProps) {
   return (
-    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-md hover:shadow-lg transition-shadow duration-200">
-      <div className="mb-4 flex items-start justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-50">{channel.name}</h3>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">@{channel.telegramId}</p>
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-lg transition-all duration-standard hover:border-slate-700 hover:shadow-xl">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="truncate text-lg font-semibold text-white">{channel.name}</h3>
+          <p className="mt-1 truncate font-mono text-xs text-slate-500">
+            ID {channel.telegramId}
+          </p>
         </div>
         <span
-          className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
+          className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
             channel.isActive
-              ? 'bg-success/10 text-success'
-              : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+              ? 'bg-emerald-500/10 text-emerald-400'
+              : 'bg-slate-700/50 text-slate-400'
           }`}
         >
-          {channel.isActive ? '🟢 Active' : '⭕ Inactive'}
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              channel.isActive ? 'bg-emerald-400' : 'bg-slate-500'
+            }`}
+          />
+          {channel.isActive ? 'Активен' : 'Отключён'}
         </span>
       </div>
 
       {channel.description && (
-        <p className="mb-4 text-sm text-slate-700 dark:text-slate-300">{channel.description}</p>
+        <p className="mb-4 text-sm text-slate-400">{channel.description}</p>
       )}
 
-      <div className="mb-6 grid grid-cols-3 gap-4 py-4 border-y border-slate-200 dark:border-slate-700">
+      <div className="grid grid-cols-3 gap-3 border-t border-slate-800 pt-4">
         <div>
-          <p className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase">Members</p>
-          <p className="mt-1 text-xl font-bold text-primary-600 dark:text-primary-400">
-            {channel.memberCount.toLocaleString()}
+          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+            Участники
+          </p>
+          <p className="mt-1 text-lg font-bold text-primary-300">
+            {formatNumber(channel.memberCount)}
           </p>
         </div>
         <div>
-          <p className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase">Fee</p>
-          <p className="mt-1 text-xl font-bold text-secondary-600 dark:text-secondary-400">
-            {channel.subscriptionFee} {channel.currency}
+          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+            Тариф
+          </p>
+          <p className="mt-1 text-lg font-bold text-secondary-300">
+            {channel.subscriptionFee > 0
+              ? formatMoney(channel.subscriptionFee, channel.currency)
+              : '—'}
           </p>
         </div>
         <div>
-          <p className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase">Created</p>
-          <p className="mt-1 text-sm text-slate-900 dark:text-slate-50">
-            {new Date(channel.createdAt).toLocaleDateString('ru-RU')}
+          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+            Создан
+          </p>
+          <p className="mt-1 text-sm text-slate-300">
+            {formatDate(channel.createdAt).split(',')[0]}
           </p>
         </div>
-      </div>
-
-      <div className="flex gap-2">
-        {onEdit && (
-          <button
-            onClick={() => onEdit(channel)}
-            className="flex-1 rounded-lg bg-primary-50 dark:bg-primary-900 px-4 py-2 text-sm font-medium text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-800 transition-colors"
-          >
-            Edit
-          </button>
-        )}
-        {onDelete && (
-          <button
-            onClick={() => onDelete(channel.id)}
-            className="flex-1 rounded-lg bg-danger/10 dark:bg-danger/20 px-4 py-2 text-sm font-medium text-danger hover:bg-danger/20 dark:hover:bg-danger/30 transition-colors"
-          >
-            Delete
-          </button>
-        )}
       </div>
     </div>
   )

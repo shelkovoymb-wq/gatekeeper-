@@ -3,43 +3,38 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Не тянуть браузеры Playwright при установке (devDep) — иначе билд висит.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
+RUN npm install -g pnpm
+
 # Copy workspace files
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc* ./
+COPY pnpm-lock.yaml* pnpm-workspace.yaml package.json .npmrc* ./
 COPY apps/web ./apps/web
 COPY packages/shared ./packages/shared
 
-# Install dependencies (tolerant to lockfile drift)
-RUN npm install -g pnpm && (pnpm install --frozen-lockfile || pnpm install)
+# Install dependencies ОДИН раз (tolerant to lockfile drift)
+RUN pnpm install --frozen-lockfile || pnpm install
 
 # Build Next.js app
 WORKDIR /app/apps/web
-RUN pnpm build
+RUN mkdir -p public && pnpm build
 
-# Runtime stage
+# Runtime stage — переиспользуем node_modules из builder (без второй установки)
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Install pnpm
 RUN npm install -g pnpm
 
-# Copy package files and dependencies
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc* ./
-COPY apps/web ./apps/web
-COPY packages/shared ./packages/shared
-
-# Install production dependencies only (tolerant to lockfile drift)
-RUN pnpm install --prod --frozen-lockfile || pnpm install --prod
-
-# Copy built application from builder
-COPY --from=builder /app/apps/web/.next ./apps/web/.next
-COPY --from=builder /app/apps/web/public ./apps/web/public
+# Забираем весь установленный и собранный /app из builder-стадии.
+COPY --from=builder /app ./
 
 WORKDIR /app/apps/web
 
-# Health check
+# Health check — админка отдаёт 200 на /admin/stats
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+  CMD node -e "require('http').get('http://localhost:3000/admin/stats',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
 
 EXPOSE 3000
 

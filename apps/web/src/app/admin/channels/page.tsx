@@ -1,14 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { ChannelCard } from '@/components/ChannelCard'
 import { useAdminStore } from '@/lib/store'
 import { api } from '@/lib/api'
-import type { Channel } from '@/types'
 
 export default function ChannelsPage() {
-  const { channels, setChannels, isLoading, setIsLoading, setError } = useAdminStore()
-  const [isCreating, setIsCreating] = useState(false)
+  const { channels, setChannels, isLoading, setIsLoading, setError, error } =
+    useAdminStore()
 
   useEffect(() => {
     const loadChannels = async () => {
@@ -16,75 +15,59 @@ export default function ChannelsPage() {
         setIsLoading(true)
         const data = await api.channels.list()
         setChannels(data)
+        setError(null)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load channels')
+        setError(err instanceof Error ? err.message : 'Не удалось загрузить каналы')
       } finally {
         setIsLoading(false)
       }
     }
-
     loadChannels()
   }, [setChannels, setIsLoading, setError])
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Are you sure?')) {
-      try {
-        await api.channels.delete(id)
-        setChannels(channels.filter((c) => c.id !== id))
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to delete channel')
-      }
-    }
-  }
-
-  const handleCreate = () => {
-    setIsCreating(true)
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-slate-500">Loading...</p>
-      </div>
-    )
-  }
-
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-slate-900">Channels</h1>
-        <button
-          onClick={handleCreate}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          New Channel
-        </button>
-      </div>
+      <header className="mb-8 flex items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-white md:text-3xl">Каналы</h1>
+          <p className="mt-1 text-sm text-slate-400">
+            Платные Telegram-каналы, подключённые к платформе
+          </p>
+        </div>
+        {!isLoading && (
+          <span className="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-sm text-slate-300">
+            {channels.length}
+          </span>
+        )}
+      </header>
 
-      {isCreating && (
-        <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-6">
-          <p className="text-sm text-blue-700">Channel creation form coming soon...</p>
-          <button
-            onClick={() => setIsCreating(false)}
-            className="mt-4 text-sm font-medium text-blue-600 hover:text-blue-800"
-          >
-            Close
-          </button>
+      {error && (
+        <div className="mb-6 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-red-300">
+          {error}
         </div>
       )}
 
-      {channels.length === 0 ? (
-        <div className="rounded-lg border border-slate-200 bg-white p-8 text-center">
-          <p className="text-slate-500">No channels yet</p>
+      {isLoading ? (
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-48 animate-pulse rounded-2xl border border-slate-800 bg-slate-900/60"
+            />
+          ))}
+        </div>
+      ) : channels.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 p-12 text-center">
+          <div className="mb-3 text-4xl">📺</div>
+          <p className="text-slate-300">Пока нет подключённых каналов</p>
+          <p className="mt-1 text-sm text-slate-500">
+            Каналы появятся здесь после подключения бота и создания тарифа
+          </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
           {channels.map((channel) => (
-            <ChannelCard
-              key={channel.id}
-              channel={channel}
-              onDelete={handleDelete}
-            />
+            <ChannelCard key={channel.id} channel={channel} />
           ))}
         </div>
       )}

@@ -1,78 +1,52 @@
 import type { User } from '@/types'
+import { formatDate } from '@/lib/format'
 
 interface UserTableProps {
   users: User[]
-  onDelete?: (id: string) => void
 }
 
-export function UserTable({ users, onDelete }: UserTableProps) {
+export function UserTable({ users }: UserTableProps) {
   if (users.length === 0) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white p-8 text-center">
-        <p className="text-slate-500">No users found</p>
+      <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 p-12 text-center">
+        <div className="mb-3 text-4xl">👥</div>
+        <p className="text-slate-300">Пока нет подписчиков</p>
       </div>
     )
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-      <table className="w-full">
+    <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/60">
+      <table className="w-full min-w-[640px] text-left">
         <thead>
-          <tr className="border-b border-slate-200 bg-slate-50">
-            <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
-              Username
-            </th>
-            <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
-              Telegram ID
-            </th>
-            <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
-              Subscriptions
-            </th>
-            <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
-              Role
-            </th>
-            <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
-              Joined
-            </th>
-            <th className="px-6 py-3 text-right text-sm font-semibold text-slate-900">
-              Actions
-            </th>
+          <tr className="border-b border-slate-800 text-xs uppercase tracking-wide text-slate-500">
+            <th className="px-6 py-4 font-medium">Пользователь</th>
+            <th className="px-6 py-4 font-medium">Telegram ID</th>
+            <th className="px-6 py-4 font-medium">Подписки</th>
+            <th className="px-6 py-4 font-medium">Регистрация</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-slate-800/70">
           {users.map((user) => (
-            <tr
-              key={user.id}
-              className="border-b border-slate-100 hover:bg-slate-50"
-            >
-              <td className="px-6 py-4 text-sm text-slate-900">{user.username}</td>
-              <td className="px-6 py-4 text-sm text-slate-600">{user.telegramId}</td>
-              <td className="px-6 py-4 text-sm">
-                <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">
+            <tr key={user.id} className="transition-colors hover:bg-slate-800/40">
+              <td className="px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary-600 to-secondary-600 text-sm font-semibold text-white">
+                    {(user.username || '?').charAt(0).toUpperCase()}
+                  </div>
+                  <span className="font-medium text-white">{user.username}</span>
+                </div>
+              </td>
+              <td className="px-6 py-4 font-mono text-sm text-slate-400">
+                {user.telegramId}
+              </td>
+              <td className="px-6 py-4">
+                <span className="inline-flex items-center rounded-full bg-primary-500/10 px-2.5 py-1 text-xs font-medium text-primary-300">
                   {user.subscriptions.length}
                 </span>
               </td>
-              <td className="px-6 py-4 text-sm text-slate-600">
-                {user.isAdmin ? (
-                  <span className="rounded-full bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700">
-                    Admin
-                  </span>
-                ) : (
-                  <span className="text-slate-500">User</span>
-                )}
-              </td>
-              <td className="px-6 py-4 text-sm text-slate-600">
-                {new Date(user.createdAt).toLocaleDateString('ru-RU')}
-              </td>
-              <td className="px-6 py-4 text-right">
-                {onDelete && (
-                  <button
-                    onClick={() => onDelete(user.id)}
-                    className="text-sm font-medium text-red-600 hover:text-red-800"
-                  >
-                    Remove
-                  </button>
-                )}
+              <td className="px-6 py-4 text-sm text-slate-400">
+                {formatDate(user.createdAt)}
               </td>
             </tr>
           ))}
