@@ -3,8 +3,8 @@ import { cabinetGet, BackendError } from '@/lib/cabinet'
 
 export async function GET() {
   try {
-    const data = await cabinetGet('/v1/cabinet/transactions')
-    return NextResponse.json({ success: true, data, timestamp: new Date().toISOString() })
+    const data = await cabinetGet('/v1/cabinet/payments')
+    return NextResponse.json({ success: true, data })
   } catch (e) {
     const status = e instanceof BackendError ? e.status : 502
     return NextResponse.json({ success: false, error: (e as Error).message }, { status })

@@ -22,6 +22,10 @@ const schema = z.object({
   N8N_SERVICE_TOKEN: z.string().optional(),
 
   PLATFORM_BOT_TOKEN: z.string().optional(),
+
+  // ИИ-ассистент настройки. Если ключа нет — ассистент работает в guided-режиме.
+  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_MODEL: z.string().default('claude-3-5-haiku-latest'),
 });
 
 export type Env = z.infer<typeof schema>;

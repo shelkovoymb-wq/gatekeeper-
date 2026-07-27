@@ -1,19 +1,12 @@
 import { NextResponse } from 'next/server'
-import type { Channel, ApiResponse } from '@/types'
-import { backendGet } from '@/lib/backend'
+import { cabinetGet, BackendError } from '@/lib/cabinet'
 
 export async function GET() {
   try {
-    const data = await backendGet<Channel[]>('/v1/admin/channels')
-    return NextResponse.json({
-      success: true,
-      data,
-      timestamp: new Date().toISOString(),
-    } as ApiResponse<Channel[]>)
+    const data = await cabinetGet('/v1/cabinet/channels')
+    return NextResponse.json({ success: true, data, timestamp: new Date().toISOString() })
   } catch (e) {
-    return NextResponse.json(
-      { success: false, error: (e as Error).message, timestamp: new Date().toISOString() } as ApiResponse<Channel[]>,
-      { status: 502 },
-    )
+    const status = e instanceof BackendError ? e.status : 502
+    return NextResponse.json({ success: false, error: (e as Error).message }, { status })
   }
 }

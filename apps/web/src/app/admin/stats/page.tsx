@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { StatsTile } from '@/components/StatsTile'
+import { SetupChecklist } from '@/components/SetupChecklist'
 import { useAdminStore } from '@/lib/store'
 import { api } from '@/lib/api'
 import { formatMoney, formatNumber } from '@/lib/format'
@@ -39,6 +40,8 @@ export default function StatsPage() {
           {error}
         </div>
       )}
+
+      <SetupChecklist />
 
       {isLoading && !stats ? (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
