@@ -78,4 +78,37 @@ export class TelegramService {
       throw e;
     }
   }
+
+  /** Инвойс Telegram Stars (валюта XTR, provider_token пустой). */
+  async sendStarsInvoice(
+    botId: string,
+    chatId: number,
+    params: { title: string; description: string; payload: string; amount: number; label: string },
+  ): Promise<void> {
+    const api = await this.api(botId);
+    await api.sendInvoice(
+      chatId,
+      params.title.slice(0, 32),
+      params.description.slice(0, 255),
+      params.payload,
+      'XTR',
+      [{ label: params.label.slice(0, 32), amount: params.amount }],
+      // provider_token пустой для Stars
+      { provider_token: '' } as never,
+    );
+  }
+
+  async answerPreCheckoutQuery(botId: string, queryId: string, ok = true, error?: string): Promise<void> {
+    const api = await this.api(botId);
+    await api.answerPreCheckoutQuery(queryId, ok, error ? { error_message: error } : undefined);
+  }
+
+  async answerCallbackQuery(botId: string, queryId: string, text?: string): Promise<void> {
+    const api = await this.api(botId);
+    try {
+      await api.answerCallbackQuery(queryId, text ? { text } : undefined);
+    } catch {
+      /* устаревший callback — не критично */
+    }
+  }
 }

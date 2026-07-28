@@ -4,9 +4,10 @@ import { TelegramUpdateHandler } from './update-handler.js';
 import { TelegramCoreModule } from './telegram-core.module.js';
 import { AccessModule } from '../access/access.module.js';
 import { ChannelsModule } from '../channels/channels.module.js';
+import { StorefrontModule } from '../storefront/storefront.module.js';
 
 @Module({
-  imports: [TelegramCoreModule, AccessModule, ChannelsModule],
+  imports: [TelegramCoreModule, AccessModule, ChannelsModule, StorefrontModule],
   controllers: [TelegramController],
   providers: [TelegramUpdateHandler],
 })
