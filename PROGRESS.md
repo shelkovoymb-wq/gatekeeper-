@@ -410,3 +410,101 @@ Stages 1-2 production-ready after:
 - Environment variables set
 - Webhooks registered with payment providers
 - n8n workflows created & tested
+
+---
+
+## Session 3: 2026-07-28…29 — Self-service, B2B2C, subscriber purchase loop, owner panel
+
+### 🧭 Модель продукта (B2B2C) — зафиксирована
+
+```
+Владелец платформы (role=owner, clientId=null)
+   └── Клиенты — владельцы каналов (role=client_admin, свой tenant)
+          └── Подписчики (Telegram-пользователи)
+```
+
+- Деньги подписчиков идут на счёт КЛИЕНТА (его бот, его платёжные ключи).
+- Платформа зарабатывает на `platform_plans` (free/start/pro): абонплата
+  `price_month` + комиссия `commission_pct` с оборота клиента.
+- У каждого клиента — свой бот и свои платёжные конфиги (`payment_configs`,
+  секреты шифруются `SECRET_BOX`).
+
+### ✅ Self-service слой (auth + кабинет + ассистент)
+
+- **auth** (`apps/api/src/auth/*`): регистрация/логин e-mail+пароль (scrypt,
+  без bcrypt), JWT 7 дней, `@nestjs/jwt`. Роли: `owner | client_admin`.
+  Регистрация создаёт клиента на бесплатном платформенном тарифе.
+- **cabinet** (`apps/api/src/cabinet/*`, `/v1/cabinet/*`, JwtAuthGuard):
+  overview, боты (подключить по токену), каналы, подписчики, транзакции,
+  тарифы (CRUD), платёжные провайдеры (yookassa/cloudpayments/robokassa/stars).
+- **assistant** (`/v1/cabinet/assistant`): ИИ-ассистент настройки
+  (Anthropic tool-use если задан `ANTHROPIC_API_KEY`, иначе детерминированный
+  гид-конечный-автомат).
+- **Frontend**: страницы `/login`, `/register`, защита через `middleware.ts`
+  (httpOnly cookie `gk_session`), BFF-роуты в `apps/web/src/app/api/*`
+  (токен не попадает в браузер). Мобильная навигация (гамбургер + drawer).
+
+### ✅ B — Цикл покупки подписчиком (Telegram Stars) — задеплоено
+
+`apps/api/src/storefront/*` + `telegram/update-handler.ts`:
+```
+/start (в боте клиента)
+  → витрина тарифов (инлайн-кнопки, только тарифы этого клиента)
+  → выбор тарифа → выбор способа оплаты → sendInvoice (XTR / Stars)
+  → pre_checkout_query → successful_payment
+      → upsert подписчика, выдача подписки на periodDays
+      → запись платежа (идемпотентно)
+      → invite-ссылки с join-request на каждый канал тарифа → ЛС подписчику
+  → заявка на вступление одобряется по активной подписке
+  → reaper кикает по истечении
+```
+Коммит `2b07698`. Задеплоено на прод (api), `healthz={status:ok,db:true}`.
+Живой end-to-end тест Stars требует реального токена бота от @BotFather +
+клиент добавляет бота в канал + создаёт тариф на этот канал.
+
+### ✅ A — Панель владельца платформы + переименование в «кабинет клиента»
+
+Backend `apps/api/src/platform/*` (`/v1/platform/*`, guard role=owner):
+- `overview` — клиенты, каналы, боты, активные подписки, оборот клиентов,
+  комиссия платформы (оборот × commission_pct), MRR платформы.
+- `clients` — список клиентов: план, статус, оборот, начисленная комиссия.
+- `plans` — платформенные тарифы (абонплата + комиссия).
+
+Frontend:
+- Раздел `/owner/*` (Платформа / Клиенты / Тарифы платформы) — только owner;
+  BFF `apps/web/src/app/api/platform/*`.
+- Навигация и подпись в `Layout` зависят от роли; `middleware.ts` разводит
+  владельца (`/owner`) и клиента (`/admin`) и маршрутизирует корень по роли.
+- Заголовки/подписи → «кабинет клиента».
+
+Коммит `13b7f3f`, ветка `claude/telegram-channels-platform-ldtz5v`.
+Локально `pnpm build` для api и web — чисто.
+
+### ⚠️ Деплой A на прод — ЗАБЛОКИРОВАН (нужно действие владельца)
+
+Автоматический канал деплоя в лабе (n8n → SSH → `pct exec 150` → docker
+compose build) сейчас не воспроизводится:
+- нода **Execute Command** отключена на этом инстансе n8n (NODES_EXCLUDE);
+- единственный SSH-креденшл **«SSH Dynamic»** (`sshPassword`) не заполнен
+  (пустой username) — узел SSH падает с `config.username must be a valid
+  string`. Отредактировать креденшл можно только в UI n8n; доступными
+  инструментами (MCP) правка креденшлов невозможна.
+
+**Что нужно от владельца:** в n8n UI открыть креденшл «SSH Dynamic» и задать
+host `192.168.1.25`, port `22`, user `root`, пароль root pve3 — после этого
+деплой A выполняется одним прогоном (сборка api+web, recreate контейнеров).
+
+### 🔐 Безопасность
+
+- Root-пароль pve3 засветился ранее в командах/нодах — **обязательно
+  сменить** (после смены — обновить креденшл «SSH Dynamic»).
+- Платёжные ключи клиентов шифруются `SECRET_BOX`; JWT — в httpOnly cookie.
+
+### 🚧 Дальше
+
+- **C** — платформенный биллинг: клиенты платят платформе по `platform_plans`,
+  расчёт и выставление комиссии.
+- Живой прогон Stars-покупки (нужен токен бота).
+- Мелочи: UI смены пароля; YooKassa из бота читать из `payment_configs`
+  (сейчас из ENV); поле starsPrice в форме тарифа; подключить
+  `ANTHROPIC_API_KEY` для LLM-ассистента.
