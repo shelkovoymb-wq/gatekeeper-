@@ -477,22 +477,29 @@ Frontend:
   владельца (`/owner`) и клиента (`/admin`) и маршрутизирует корень по роли.
 - Заголовки/подписи → «кабинет клиента».
 
-Коммит `13b7f3f`, ветка `claude/telegram-channels-platform-ldtz5v`.
-Локально `pnpm build` для api и web — чисто.
+Коммиты `13b7f3f` (A) + `0dd18a1` (fix: регистрация PlatformModule),
+ветка `claude/telegram-channels-platform-ldtz5v`.
 
-### ⚠️ Деплой A на прод — ЗАБЛОКИРОВАН (нужно действие владельца)
+### ✅ Деплой A на прод — ВЫПОЛНЕН и проверен
 
-Автоматический канал деплоя в лабе (n8n → SSH → `pct exec 150` → docker
-compose build) сейчас не воспроизводится:
-- нода **Execute Command** отключена на этом инстансе n8n (NODES_EXCLUDE);
-- единственный SSH-креденшл **«SSH Dynamic»** (`sshPassword`) не заполнен
-  (пустой username) — узел SSH падает с `config.username must be a valid
-  string`. Отредактировать креденшл можно только в UI n8n; доступными
-  инструментами (MCP) правка креденшлов невозможна.
+Задеплоено на `192.168.1.25` (LXC gatekeeper) через docker compose
+(api + web пересобраны, контейнеры пересозданы). Внешняя проверка через
+`https://gatekeeper.skud24.ru`:
+- `healthz` = `{status:ok, db:true}`
+- `/v1/platform/overview` без токена → **401** (guard owner работает),
+  Nest мапит `PlatformController {/v1/platform}` → overview/clients/plans
+- `/v1/cabinet/overview` без токена → 401
+- `/login` → 200, `/owner/overview` → 307 (редирект на логин — верно)
 
-**Что нужно от владельца:** в n8n UI открыть креденшл «SSH Dynamic» и задать
-host `192.168.1.25`, port `22`, user `root`, пароль root pve3 — после этого
-деплой A выполняется одним прогоном (сборка api+web, recreate контейнеров).
+Канал деплоя: n8n под-workflow **`SSH Execute` (ka0cxJxH5Qp7bR9N)** —
+принимает `{host, user, password, command}` (поле именно `user`), SSH на
+хост лабы. Триггерится через тонкий webhook-workflow (webhook → Code →
+Execute Workflow). Ноды Execute Command на этом инстансе нет — только SSH.
+
+**Пойманный баг:** `import { PlatformModule }` был добавлен, но модуль не
+вписан в массив `imports` @Module — tsc убирал неиспользуемый импорт, и
+Nest не регистрировал контроллер (`/v1/platform/*` → 404). Исправлено в
+`0dd18a1`.
 
 ### 🔐 Безопасность
 
