@@ -52,6 +52,7 @@ import { AssistantModule } from './assistant/assistant.module.js'
     AdminModule,
     AuthModule,
     CabinetModule,
+    PlatformModule,
     AssistantModule,
     TelegramModule
   ],
