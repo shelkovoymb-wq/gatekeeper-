@@ -21,6 +21,7 @@ import { PaymentsModule } from './payments/payments.module.js'
 import { AdminModule } from './admin/admin.module.js'
 import { AuthModule } from './auth/auth.module.js'
 import { CabinetModule } from './cabinet/cabinet.module.js'
+import { PlatformModule } from './platform/platform.module.js'
 import { AssistantModule } from './assistant/assistant.module.js'
 
 /**

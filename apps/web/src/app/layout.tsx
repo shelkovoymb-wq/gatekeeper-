@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Gatekeeper — Панель управления',
-  description: 'Управление платными Telegram-каналами: каналы, подписчики, платежи',
+  title: 'Gatekeeper — Кабинет',
+  description: 'Платные Telegram-каналы: кабинет клиента и панель владельца платформы',
 }
 
 export default function RootLayout({

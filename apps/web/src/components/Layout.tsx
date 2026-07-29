@@ -9,7 +9,7 @@ interface LayoutProps {
   children: React.ReactNode
 }
 
-const navItems = [
+const clientNav = [
   { href: '/admin/stats', label: 'Обзор', icon: '📊' },
   { href: '/admin/channels', label: 'Каналы', icon: '📺' },
   { href: '/admin/tariffs', label: 'Тарифы', icon: '🏷️' },
@@ -19,18 +19,32 @@ const navItems = [
   { href: '/admin/assistant', label: 'Ассистент', icon: '🤖' },
 ]
 
+const ownerNav = [
+  { href: '/owner/overview', label: 'Платформа', icon: '📈' },
+  { href: '/owner/clients', label: 'Клиенты', icon: '🏢' },
+  { href: '/owner/plans', label: 'Тарифы платформы', icon: '🏷️' },
+]
+
 export function Layout({ children }: LayoutProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [company, setCompany] = useState<string>('')
+  const [role, setRole] = useState<string>('')
   const [mobileOpen, setMobileOpen] = useState(false)
 
   useEffect(() => {
     fetch('/api/auth/me')
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d?.data?.companyName && setCompany(d.data.companyName))
+      .then((d) => {
+        if (d?.data?.companyName) setCompany(d.data.companyName)
+        if (d?.data?.role) setRole(d.data.role)
+      })
       .catch(() => {})
   }, [])
+
+  const isOwner = role === 'owner'
+  const navItems = isOwner ? ownerNav : clientNav
+  const subtitle = isOwner ? 'Владелец платформы' : company || 'Кабинет клиента'
 
   // Закрываем мобильное меню при переходе на другую страницу
   useEffect(() => {
@@ -51,7 +65,7 @@ export function Layout({ children }: LayoutProps) {
         </div>
         <div className="min-w-0">
           <h1 className="truncate text-lg font-bold leading-tight text-white">Gatekeeper</h1>
-          <p className="truncate text-xs text-slate-400">{company || 'Платные Telegram-каналы'}</p>
+          <p className="truncate text-xs text-slate-400">{subtitle}</p>
         </div>
       </div>
 
