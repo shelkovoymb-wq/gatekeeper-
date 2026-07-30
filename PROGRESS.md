@@ -507,11 +507,43 @@ Nest не регистрировал контроллер (`/v1/platform/*` → 
   сменить** (после смены — обновить креденшл «SSH Dynamic»).
 - Платёжные ключи клиентов шифруются `SECRET_BOX`; JWT — в httpOnly cookie.
 
+### ✅ C — Платформенный биллинг (счета клиентам) — задеплоено
+
+Backend:
+- миграция `0002` — индексы на существующей `platform_invoices` (уникальный
+  `client_id + период` для идемпотентной генерации).
+- `PlatformService` (владелец): `generateInvoices(period)` — за период
+  абонплата `price_month` + комиссия `оборот × commission_pct` (оборот =
+  succeeded-платежи клиента в периоде), идемпотентный upsert (не трогает
+  оплаченные); `listInvoices`, `markInvoicePaid`, `voidInvoice`,
+  `billingSummary`. Эндпоинты `/v1/platform/invoices*`, `/billing-summary`.
+- `CabinetService` (клиент): `myBilling` (тариф, счета, долг),
+  `availablePlatformPlans`, `changePlan`. Эндпоинты `/v1/cabinet/billing*`.
+
+Frontend:
+- `/owner/billing` — сводка (выставлено/оплачено/к оплате), кнопка
+  «сгенерировать за месяц», таблица счетов, «оплачен»/«аннулировать».
+- `/admin/billing` — текущий платформенный тариф, долг, смена тарифа,
+  список счетов.
+- BFF `/api/platform/invoices*`, `/api/billing*`; пункты «Биллинг» в навигации.
+
+Коммит `814f88b`. Задеплоено на прод, проверено снаружи
+(`gatekeeper.skud24.ru`): миграция `0002` применена; маршруты биллинга
+зарегистрированы; `/v1/platform/billing-summary`, `/v1/platform/invoices`,
+`/v1/cabinet/billing` без токена → 401; web `/owner/billing`, `/admin/billing`
+→ 307 (редирект на логин). При деплое всплыл `no space left on device` на
+LXC (диск 20G, был 92%) — освобождено 13.3GB через
+`docker builder prune -af` + `docker image prune -f` (том БД не трогали),
+после чего web пересобрался (rc=0).
+
 ### 🚧 Дальше
 
-- **C** — платформенный биллинг: клиенты платят платформе по `platform_plans`,
-  расчёт и выставление комиссии.
-- Живой прогон Stars-покупки (нужен токен бота).
+- Живой прогон Stars-покупки (нужен токen бота от @BotFather).
+- Автогенерация счетов по расписанию (сейчас — вручную/по кнопке); статус
+  `overdue` по `plan_paid_until`; приём оплаты платформенных счетов
+  (сейчас владелец отмечает вручную).
 - Мелочи: UI смены пароля; YooKassa из бота читать из `payment_configs`
-  (сейчас из ENV); поле starsPrice в форме тарифа; подключить
+  (сейчас из ENV); поле `starsPrice` в форме тарифа; подключить
   `ANTHROPIC_API_KEY` для LLM-ассистента.
+- Диск LXC 20G — под нагрузкой сборок тесновато; чистить кеш Docker
+  периодически либо расширить диск.
