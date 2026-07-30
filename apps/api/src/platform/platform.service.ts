@@ -11,13 +11,22 @@ import {
   subscriptions,
 } from '../db/schema.js';
 
+const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+
 /** Первый день текущего месяца и первый день следующего (границы периода, [start, end)). */
 function currentMonthPeriod(): { start: string; end: string } {
   const now = new Date();
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
-  return { start: iso(start), end: iso(end) };
+  return { start: isoDate(start), end: isoDate(end) };
+}
+
+/** Границы прошлого месяца [start, end) — для автогенерации счёта по закрытому периоду. */
+function previousMonthPeriod(): { start: string; end: string } {
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  return { start: isoDate(start), end: isoDate(end) };
 }
 
 /**
@@ -300,5 +309,23 @@ export class PlatformService {
       paidTotal: Number(agg?.paid ?? 0),
       dueTotal: Number(agg?.due ?? 0),
     };
+  }
+
+  /** Границы прошлого месяца (для автогенерации по закрытому периоду). */
+  static previousMonth() {
+    return previousMonthPeriod();
+  }
+
+  /** Помечает неоплаченные счета просроченными: period_end + graceDays < сегодня. */
+  async markOverdue(graceDays = 7) {
+    const res = await this.db
+      .update(platformInvoices)
+      .set({ status: 'overdue' })
+      .where(
+        sql`${platformInvoices.status} = 'pending'
+            and ${platformInvoices.periodEnd} + (${graceDays} || ' days')::interval < now()`,
+      )
+      .returning({ id: platformInvoices.id });
+    return { overdue: res.length };
   }
 }

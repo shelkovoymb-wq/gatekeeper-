@@ -73,4 +73,10 @@ export class PlatformController {
     assertOwner(auth);
     return this.platform.voidInvoice(id);
   }
+
+  @Post('invoices/mark-overdue')
+  markOverdue(@Auth() auth: AuthContext, @Body() dto: { graceDays?: number }) {
+    assertOwner(auth);
+    return this.platform.markOverdue(dto?.graceDays ?? 7);
+  }
 }
