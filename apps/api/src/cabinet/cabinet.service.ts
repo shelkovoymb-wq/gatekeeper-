@@ -6,10 +6,13 @@ import type { SecretBox } from '../common/crypto.js';
 import {
   bots,
   channels,
+  clients,
   paymentConfigs,
   payments,
   planChannels,
   plans,
+  platformInvoices,
+  platformPlans,
   subscriptions,
 } from '../db/schema.js';
 import { BotsService } from '../bots/bots.service.js';
@@ -244,6 +247,95 @@ export class CabinetService {
       // stars не требует ключей
       needsKeys: provider !== 'stars',
     }));
+  }
+
+  // ─── Биллинг клиента (что он должен платформе) ────────────────────────────
+
+  /** Текущий платформенный тариф клиента + его счета и сумма к оплате. */
+  async myBilling(clientId: string) {
+    const [c] = await this.db
+      .select({
+        planId: platformPlans.id,
+        planCode: platformPlans.code,
+        planName: platformPlans.name,
+        priceMonth: platformPlans.priceMonth,
+        commissionPct: platformPlans.commissionPct,
+        currency: platformPlans.currency,
+        planStatus: clients.planStatus,
+        planPaidUntil: clients.planPaidUntil,
+      })
+      .from(clients)
+      .innerJoin(platformPlans, eq(platformPlans.id, clients.platformPlanId))
+      .where(eq(clients.id, clientId))
+      .limit(1);
+    if (!c) throw new NotFoundException('клиент не найден');
+
+    const rows = await this.db
+      .select()
+      .from(platformInvoices)
+      .where(eq(platformInvoices.clientId, clientId))
+      .orderBy(sql`${platformInvoices.createdAt} desc`);
+
+    const invoices = rows.map((r) => ({
+      id: r.id,
+      periodStart: r.periodStart,
+      periodEnd: r.periodEnd,
+      amount: Number(r.amount),
+      status: r.status,
+      details: (r.details as Record<string, unknown>) ?? {},
+      createdAt: r.createdAt?.toISOString?.() ?? String(r.createdAt),
+    }));
+    const dueTotal = invoices
+      .filter((i) => i.status === 'pending' || i.status === 'overdue')
+      .reduce((s, i) => s + i.amount, 0);
+
+    return {
+      plan: {
+        code: c.planCode,
+        name: c.planName,
+        priceMonth: Number(c.priceMonth ?? 0),
+        commissionPct: Number(c.commissionPct ?? 0),
+        currency: c.currency,
+        status: c.planStatus,
+        paidUntil: c.planPaidUntil?.toISOString?.() ?? null,
+      },
+      dueTotal: Math.round(dueTotal * 100) / 100,
+      invoicesCount: invoices.length,
+      invoices,
+    };
+  }
+
+  /** Доступные платформенные тарифы (для смены плана клиентом). */
+  async availablePlatformPlans() {
+    const rows = await this.db
+      .select()
+      .from(platformPlans)
+      .where(eq(platformPlans.isActive, true))
+      .orderBy(sql`${platformPlans.priceMonth} asc`);
+    return rows.map((p) => ({
+      code: p.code,
+      name: p.name,
+      priceMonth: Number(p.priceMonth ?? 0),
+      commissionPct: Number(p.commissionPct ?? 0),
+      currency: p.currency,
+      limits: p.limits ?? {},
+      features: p.features ?? {},
+    }));
+  }
+
+  /** Клиент переключает свой платформенный тариф. */
+  async changePlan(clientId: string, code: string) {
+    const [plan] = await this.db
+      .select({ id: platformPlans.id, code: platformPlans.code })
+      .from(platformPlans)
+      .where(and(eq(platformPlans.code, code), eq(platformPlans.isActive, true)))
+      .limit(1);
+    if (!plan) throw new NotFoundException('тариф не найден');
+    await this.db
+      .update(clients)
+      .set({ platformPlanId: plan.id, planStatus: 'active' })
+      .where(eq(clients.id, clientId));
+    return { ok: true, planCode: plan.code };
   }
 
   async setPayment(

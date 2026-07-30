@@ -1,14 +1,24 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { eq, sql } from 'drizzle-orm';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { and, eq, sql } from 'drizzle-orm';
 import { DB, type Database } from '../db/db.module.js';
 import {
   bots,
   channels,
   clients,
   payments,
+  platformInvoices,
   platformPlans,
   subscriptions,
 } from '../db/schema.js';
+
+/** Первый день текущего месяца и первый день следующего (границы периода, [start, end)). */
+function currentMonthPeriod(): { start: string; end: string } {
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  return { start: iso(start), end: iso(end) };
+}
 
 /**
  * Сервис владельца платформы (role=owner, clientId=null).
@@ -144,5 +154,151 @@ export class PlatformService {
       limits: p.limits ?? {},
       features: p.features ?? {},
     }));
+  }
+
+  // ─── Биллинг платформы (счета клиентам) ───────────────────────────────────
+
+  /**
+   * Генерирует (идемпотентно) счета за период [start, end) по всем клиентам:
+   * абонплата тарифа (price_month) + комиссия (оборот × commission_pct).
+   * Оборот = сумма succeeded-платежей клиента с created_at в периоде.
+   * Существующий счёт периода обновляется, если он ещё не оплачен.
+   */
+  async generateInvoices(period?: { start?: string; end?: string }) {
+    const { start, end } =
+      period?.start && period?.end
+        ? { start: period.start, end: period.end }
+        : currentMonthPeriod();
+
+    const rows = await this.db
+      .select({
+        id: clients.id,
+        planCode: platformPlans.code,
+        planName: platformPlans.name,
+        priceMonth: platformPlans.priceMonth,
+        commissionPct: platformPlans.commissionPct,
+        currency: platformPlans.currency,
+      })
+      .from(clients)
+      .innerJoin(platformPlans, eq(platformPlans.id, clients.platformPlanId));
+
+    let created = 0;
+    let updated = 0;
+    for (const c of rows) {
+      const [agg] = await this.db
+        .select({ turnover: sql<string>`coalesce(sum(${payments.amount}), 0)` })
+        .from(payments)
+        .where(
+          sql`${payments.clientId} = ${c.id} and ${payments.status} = 'succeeded'
+              and ${payments.createdAt} >= ${start} and ${payments.createdAt} < ${end}`,
+        );
+      const turnover = Number(agg?.turnover ?? 0);
+      const pct = Number(c.commissionPct ?? 0);
+      const subscription = Number(c.priceMonth ?? 0);
+      const commission = Math.round(((turnover * pct) / 100) * 100) / 100;
+      const total = Math.round((subscription + commission) * 100) / 100;
+      const details = {
+        planCode: c.planCode,
+        planName: c.planName,
+        subscriptionAmount: subscription,
+        commissionPct: pct,
+        turnoverBase: turnover,
+        commissionAmount: commission,
+        currency: c.currency,
+      };
+
+      const res = await this.db
+        .insert(platformInvoices)
+        .values({
+          clientId: c.id,
+          periodStart: start,
+          periodEnd: end,
+          amount: String(total),
+          status: 'pending',
+          details,
+        })
+        .onConflictDoUpdate({
+          target: [
+            platformInvoices.clientId,
+            platformInvoices.periodStart,
+            platformInvoices.periodEnd,
+          ],
+          set: { amount: String(total), details },
+          setWhere: sql`${platformInvoices.status} <> 'paid'`,
+        })
+        .returning({ id: platformInvoices.id, createdAt: platformInvoices.createdAt });
+      if (res.length) created += 1;
+      else updated += 1;
+    }
+    return { period: { start, end }, clients: rows.length, created, updated };
+  }
+
+  /** Все счета платформы (владелец), новые сверху. */
+  async listInvoices(status?: string) {
+    const base = this.db
+      .select({
+        id: platformInvoices.id,
+        clientId: platformInvoices.clientId,
+        clientName: clients.name,
+        periodStart: platformInvoices.periodStart,
+        periodEnd: platformInvoices.periodEnd,
+        amount: platformInvoices.amount,
+        status: platformInvoices.status,
+        details: platformInvoices.details,
+        createdAt: platformInvoices.createdAt,
+      })
+      .from(platformInvoices)
+      .innerJoin(clients, eq(clients.id, platformInvoices.clientId));
+    const rows = status
+      ? await base.where(eq(platformInvoices.status, status)).orderBy(sql`${platformInvoices.createdAt} desc`)
+      : await base.orderBy(sql`${platformInvoices.createdAt} desc`);
+    return rows.map((r) => ({
+      ...r,
+      amount: Number(r.amount),
+      details: (r.details as Record<string, unknown>) ?? {},
+      createdAt: r.createdAt?.toISOString?.() ?? String(r.createdAt),
+    }));
+  }
+
+  private async setInvoiceStatus(invoiceId: string, status: 'paid' | 'void') {
+    const [inv] = await this.db
+      .select({ id: platformInvoices.id, details: platformInvoices.details })
+      .from(platformInvoices)
+      .where(eq(platformInvoices.id, invoiceId))
+      .limit(1);
+    if (!inv) throw new NotFoundException('счёт не найден');
+    const details = { ...((inv.details as Record<string, unknown>) ?? {}) };
+    if (status === 'paid') details.paidAt = new Date().toISOString();
+    await this.db
+      .update(platformInvoices)
+      .set({ status, details })
+      .where(eq(platformInvoices.id, invoiceId));
+    return { ok: true, id: invoiceId, status };
+  }
+
+  markInvoicePaid(invoiceId: string) {
+    return this.setInvoiceStatus(invoiceId, 'paid');
+  }
+
+  voidInvoice(invoiceId: string) {
+    return this.setInvoiceStatus(invoiceId, 'void');
+  }
+
+  /** Сводка биллинга: выставлено, оплачено, к оплате. */
+  async billingSummary() {
+    const [agg] = await this.db
+      .select({
+        issued: sql<string>`coalesce(sum(${platformInvoices.amount}), 0)`,
+        count: sql<number>`count(*)`,
+        paid: sql<string>`coalesce(sum(case when ${platformInvoices.status} = 'paid' then ${platformInvoices.amount} else 0 end), 0)`,
+        due: sql<string>`coalesce(sum(case when ${platformInvoices.status} in ('pending','overdue') then ${platformInvoices.amount} else 0 end), 0)`,
+      })
+      .from(platformInvoices);
+    return {
+      invoicesCount: Number(agg?.count ?? 0),
+      issuedTotal: Number(agg?.issued ?? 0),
+      paidTotal: Number(agg?.paid ?? 0),
+      dueTotal: Number(agg?.due ?? 0),
+    };
   }
 }

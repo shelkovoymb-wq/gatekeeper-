@@ -15,6 +15,7 @@ const clientNav = [
   { href: '/admin/tariffs', label: 'Тарифы', icon: '🏷️' },
   { href: '/admin/users', label: 'Подписчики', icon: '👥' },
   { href: '/admin/payments', label: 'Платежи', icon: '💳' },
+  { href: '/admin/billing', label: 'Оплата платформы', icon: '🧾' },
   { href: '/admin/settings', label: 'Настройка', icon: '⚙️' },
   { href: '/admin/assistant', label: 'Ассистент', icon: '🤖' },
 ]
@@ -23,6 +24,7 @@ const ownerNav = [
   { href: '/owner/overview', label: 'Платформа', icon: '📈' },
   { href: '/owner/clients', label: 'Клиенты', icon: '🏢' },
   { href: '/owner/plans', label: 'Тарифы платформы', icon: '🏷️' },
+  { href: '/owner/billing', label: 'Биллинг', icon: '🧾' },
 ]
 
 export function Layout({ children }: LayoutProps) {

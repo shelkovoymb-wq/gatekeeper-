@@ -119,4 +119,23 @@ export class CabinetController {
       dto?.isActive ?? true,
     );
   }
+
+  // ─── Биллинг клиента ──────────────────────────────────────────────────────
+
+  @Get('billing')
+  billing(@Auth() auth: AuthContext) {
+    return this.cabinet.myBilling(clientIdOf(auth));
+  }
+
+  @Get('billing/plans')
+  billingPlans(@Auth() auth: AuthContext) {
+    clientIdOf(auth);
+    return this.cabinet.availablePlatformPlans();
+  }
+
+  @Put('billing/plan')
+  changePlan(@Auth() auth: AuthContext, @Body() dto: { code: string }) {
+    if (!dto?.code) throw new BadRequestException('нужен code тарифа');
+    return this.cabinet.changePlan(clientIdOf(auth), dto.code);
+  }
 }

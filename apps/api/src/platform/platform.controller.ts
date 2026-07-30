@@ -1,4 +1,13 @@
-import { Controller, ForbiddenException, Get, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { Auth, JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthContext } from '../auth/auth.types.js';
 import { PlatformService } from './platform.service.js';
@@ -31,5 +40,37 @@ export class PlatformController {
   plans(@Auth() auth: AuthContext) {
     assertOwner(auth);
     return this.platform.listPlatformPlans();
+  }
+
+  // ─── Биллинг ──────────────────────────────────────────────────────────────
+
+  @Get('billing-summary')
+  billingSummary(@Auth() auth: AuthContext) {
+    assertOwner(auth);
+    return this.platform.billingSummary();
+  }
+
+  @Get('invoices')
+  invoices(@Auth() auth: AuthContext, @Query('status') status?: string) {
+    assertOwner(auth);
+    return this.platform.listInvoices(status);
+  }
+
+  @Post('invoices/generate')
+  generate(@Auth() auth: AuthContext, @Body() dto: { start?: string; end?: string }) {
+    assertOwner(auth);
+    return this.platform.generateInvoices(dto ?? {});
+  }
+
+  @Post('invoices/:id/paid')
+  markPaid(@Auth() auth: AuthContext, @Param('id') id: string) {
+    assertOwner(auth);
+    return this.platform.markInvoicePaid(id);
+  }
+
+  @Post('invoices/:id/void')
+  voidInvoice(@Auth() auth: AuthContext, @Param('id') id: string) {
+    assertOwner(auth);
+    return this.platform.voidInvoice(id);
   }
 }

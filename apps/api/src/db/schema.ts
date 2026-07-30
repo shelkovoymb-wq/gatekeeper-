@@ -74,18 +74,29 @@ export const clientUsers = pgTable('client_users', {
   createdAt: nowDefault(),
 });
 
-export const platformInvoices = pgTable('platform_invoices', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  clientId: uuid('client_id')
-    .notNull()
-    .references(() => clients.id),
-  periodStart: date('period_start').notNull(),
-  periodEnd: date('period_end').notNull(),
-  amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
-  status: text('status').notNull().default('pending'), // pending|paid|void|overdue
-  details: jsonb('details').notNull().default(sql`'{}'::jsonb`),
-  createdAt: nowDefault(),
-});
+export const platformInvoices = pgTable(
+  'platform_invoices',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id),
+    periodStart: date('period_start').notNull(),
+    periodEnd: date('period_end').notNull(),
+    amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+    status: text('status').notNull().default('pending'), // pending|paid|void|overdue
+    details: jsonb('details').notNull().default(sql`'{}'::jsonb`),
+    createdAt: nowDefault(),
+  },
+  (t) => ({
+    byClientPeriod: uniqueIndex('platform_invoices_client_period_uq').on(
+      t.clientId,
+      t.periodStart,
+      t.periodEnd,
+    ),
+    byStatus: index('platform_invoices_status_idx').on(t.status),
+  }),
+);
 
 // ─── УРОВЕНЬ КЛИЕНТА ─────────────────────────────────────────────────────────
 
