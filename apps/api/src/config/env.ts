@@ -23,6 +23,11 @@ const schema = z.object({
 
   PLATFORM_BOT_TOKEN: z.string().optional(),
 
+  // Владелец платформы (role=owner). Если заданы — на старте гарантируется
+  // наличие owner-аккаунта (идемпотентно, ensureOwner).
+  OWNER_EMAIL: z.string().email().optional(),
+  OWNER_PASSWORD: z.string().min(8).optional(),
+
   // ИИ-ассистент настройки. Если ключа нет — ассистент работает в guided-режиме.
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default('claude-3-5-haiku-latest'),
