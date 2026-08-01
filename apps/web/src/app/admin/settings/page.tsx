@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { ChangePassword } from '@/components/ChangePassword'
 
 interface Bot {
   id: string
@@ -151,6 +152,8 @@ export default function SettingsPage() {
           ))}
         </div>
       </section>
+
+      <ChangePassword />
     </div>
   )
 }

@@ -12,6 +12,10 @@ interface LoginDto {
   email: string;
   password: string;
 }
+interface ChangePasswordDto {
+  currentPassword: string;
+  newPassword: string;
+}
 
 @Controller('v1/auth')
 export class AuthController {
@@ -31,5 +35,11 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   me(@Auth() auth: AuthContext) {
     return this.auth.me(auth);
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  changePassword(@Auth() auth: AuthContext, @Body() dto: ChangePasswordDto) {
+    return this.auth.changePassword(auth.userId, dto?.currentPassword, dto?.newPassword);
   }
 }

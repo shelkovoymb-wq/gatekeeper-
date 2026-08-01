@@ -122,6 +122,27 @@ export class AuthService {
     };
   }
 
+  /** Смена собственного пароля: проверяем текущий, сохраняем новый. */
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    if (!newPassword || newPassword.length < 8) {
+      throw new BadRequestException('новый пароль должен быть не короче 8 символов');
+    }
+    const [user] = await this.db
+      .select({ id: clientUsers.id, passwordHash: clientUsers.passwordHash })
+      .from(clientUsers)
+      .where(eq(clientUsers.id, userId))
+      .limit(1);
+    if (!user || !user.passwordHash) throw new UnauthorizedException('пользователь не найден');
+    const ok = await verifyPassword(currentPassword, user.passwordHash);
+    if (!ok) throw new UnauthorizedException('текущий пароль неверен');
+    const passwordHash = await hashPassword(newPassword);
+    await this.db
+      .update(clientUsers)
+      .set({ passwordHash })
+      .where(eq(clientUsers.id, userId));
+    return { ok: true };
+  }
+
   private async companyName(clientId: string | null): Promise<string | null> {
     if (!clientId) return 'Платформа';
     const [c] = await this.db
