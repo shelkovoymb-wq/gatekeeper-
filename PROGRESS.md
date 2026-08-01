@@ -552,8 +552,24 @@ LXC (диск 20G, был 92%) — освобождено 13.3GB через
 - Живой прогон Stars-покупки (нужен токен бота от @BotFather).
 - Приём оплаты платформенных счетов (сейчас владелец отмечает вручную);
   продление `plan_paid_until` при оплате.
-- Мелочи: UI смены пароля; YooKassa из бота читать из `payment_configs`
+- Мелочи: YooKassa из бота читать из `payment_configs`
   (сейчас из ENV); поле `starsPrice` в форме тарифа; подключить
   `ANTHROPIC_API_KEY` для LLM-ассистента.
+
+### ✅ Bootstrap владельца + смена пароля — задеплоено
+
+- **Bootstrap владельца**: `main.ts` на старте (если заданы
+  `OWNER_EMAIL`/`OWNER_PASSWORD`) идемпотентно гарантирует owner-аккаунт
+  (`ensureOwner`). Владелец заведён на прод (`shilshilkow2@gmail.com`),
+  вход в `/owner/*` работает. Коммит с bootstrap + env-поля.
+- **Смена пароля**: `AuthService.changePassword` (проверка текущего,
+  scrypt-хеш нового) + `POST /v1/auth/change-password` (guard);
+  BFF `/api/auth/change-password`; компонент `ChangePassword` в
+  `/admin/settings` и новой `/owner/settings` (+ пункт «Настройки» в
+  навигации владельца). Коммит `fd4fcb7`. Проверено round-trip'ом снаружи:
+  смена → вход новым паролем ok, старый → 401, возврат → ok.
+  Примечание: `ensureOwner` только создаёт (не сбрасывает), поэтому после
+  смены пароля через UI значение `OWNER_PASSWORD` в `.env` становится
+  неактуальным — его можно убрать из `.env`.
 - Диск LXC 20G — под нагрузкой сборок тесновато; чистить кеш Docker
   периодически либо расширить диск.
