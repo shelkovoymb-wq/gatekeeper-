@@ -76,7 +76,13 @@ export class StorefrontService {
       return;
     }
     const keyboard = list.map((p) => [
-      { text: `💳 ${p.name} — ${p.price} ${p.currency === 'RUB' ? '₽' : p.currency}`, callback_data: `buy:${p.id}` },
+      {
+        text:
+          p.price <= 0
+            ? `🎁 ${p.name} — бесплатно`
+            : `💳 ${p.name} — ${p.price} ${p.currency === 'RUB' ? '₽' : p.currency}`,
+        callback_data: `buy:${p.id}`,
+      },
     ]);
     await this.tg.sendMessage(
       botId,
@@ -95,6 +101,23 @@ export class StorefrontService {
       const planId = data.slice(4);
       const plan = (await this.plansForBot(botId)).find((p) => p.id === planId);
       if (!plan) return;
+
+      // Бесплатный тариф — сразу выдаём доступ, без экрана оплаты.
+      if (plan.price <= 0) {
+        await this.fulfillment.fulfill({
+          botId,
+          tgUserId,
+          username: cq.from.username,
+          firstName: cq.from.first_name,
+          planId,
+          provider: 'free',
+          providerPaymentId: `free:${tgUserId}:${planId}:${Date.now()}`,
+          rawAmount: 0,
+          rawCurrency: plan.currency,
+        });
+        return;
+      }
+
       const keyboard = [
         [{ text: `⭐ Оплатить Telegram Stars`, callback_data: `pays:${planId}` }],
       ];
