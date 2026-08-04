@@ -8,18 +8,16 @@ import { Bot } from 'grammy';
 import { randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { DB, type Database } from '../db/db.module.js';
-import { ENV } from '../config/config.module.js';
-import type { Env } from '../config/env.js';
 import { SECRET_BOX } from '../common/crypto.module.js';
 import type { SecretBox } from '../common/crypto.js';
 import { bots } from '../db/schema.js';
 import { TenantsService } from '../tenants/tenants.service.js';
+import { BotPoller } from '../telegram/bot-poller.js';
 
 export interface RegisterBotResult {
   botId: string;
   tgBotId: number;
   username: string;
-  webhookUrl: string;
 }
 
 @Injectable()
@@ -28,14 +26,16 @@ export class BotsService {
 
   constructor(
     @Inject(DB) private readonly db: Database,
-    @Inject(ENV) private readonly env: Env,
     @Inject(SECRET_BOX) private readonly box: SecretBox,
     private readonly tenants: TenantsService,
+    private readonly poller: BotPoller,
   ) {}
 
   /**
    * Подключает бота по BotFather-токену: валидирует через getMe, шифрует токен,
-   * сохраняет и ставит webhook на /tg/webhook/<botId> с индивидуальным secret.
+   * сохраняет и запускает приём апдейтов через long polling (входящие webhook'и
+   * от Telegram блокируются сетью — long polling требует только исходящих
+   * соединений, см. bot-poller.ts).
    */
   async register(params: {
     token: string;
@@ -97,21 +97,10 @@ export class BotsService {
       botId = created.id;
     }
 
-    // 3. Установка webhook
-    const webhookUrl = `${this.env.PUBLIC_API_URL.replace(/\/$/, '')}/tg/webhook/${botId}`;
-    await probe.api.setWebhook(webhookUrl, {
-      secret_token: webhookSecret,
-      allowed_updates: [
-        'message',
-        'callback_query',
-        'chat_join_request',
-        'chat_member',
-        'my_chat_member',
-        'pre_checkout_query',
-      ],
-    });
+    // 3. Приём апдейтов — long polling (снимает вебхук, если был, и стартует цикл).
+    void this.poller.start(botId);
 
     this.logger.log(`bot @${me.username} (${me.id}) registered as ${botId}`);
-    return { botId, tgBotId: me.id, username: me.username ?? '', webhookUrl };
+    return { botId, tgBotId: me.id, username: me.username ?? '' };
   }
 }
