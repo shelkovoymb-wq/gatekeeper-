@@ -54,6 +54,25 @@ export class SubscriptionsService {
     return row ?? null;
   }
 
+  /** Есть ли у подписчика активная (trial/active/grace) подписка именно на этот тариф. */
+  async findActiveForPlan(
+    subscriberId: string,
+    planId: string,
+  ): Promise<{ id: string } | null> {
+    const [row] = await this.db
+      .select({ id: subscriptions.id })
+      .from(subscriptions)
+      .where(
+        and(
+          eq(subscriptions.subscriberId, subscriberId),
+          eq(subscriptions.planId, planId),
+          inArray(subscriptions.status, ACCESS_STATUSES),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
   /**
    * Ручная выдача/продление подписки (для теста и операций поддержки).
    * Продление не сжигает остаток: paid_until = max(now, paid_until) + period.

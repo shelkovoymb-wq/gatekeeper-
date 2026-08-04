@@ -87,15 +87,66 @@ export class FulfillmentService {
       })
       .onConflictDoNothing();
 
-    // Доступ: одноразовые join-request ссылки на каналы тарифа.
+    await this.sendAccessLinks(input.botId, input.tgUserId, input.planId, pc.channels, {
+      alreadyActive: false,
+    });
+    this.logger.log(`FULFILLED user=${input.tgUserId} plan=${input.planId} sub=${sub.id}`);
+  }
+
+  /**
+   * Если у подписчика уже есть активная (trial/active/grace) подписка на этот
+   * тариф — не просим оплатить повторно, а сразу выдаём свежую ссылку в канал.
+   * Возвращает true, если доступ был переиздан (и дальнейшую оплату запускать не нужно).
+   */
+  async reissueIfActive(input: {
+    botId: string;
+    tgUserId: number;
+    username?: string | null;
+    firstName?: string | null;
+    planId: string;
+  }): Promise<boolean> {
+    const subscriber = await this.subscribers.upsert({
+      tgUserId: input.tgUserId,
+      username: input.username,
+      firstName: input.firstName,
+    });
+    const active = await this.subs.findActiveForPlan(subscriber.id, input.planId);
+    if (!active) return false;
+
+    const pc = await this.planWithChannels(input.planId);
+    if (!pc) return false;
+
+    await this.sendAccessLinks(input.botId, input.tgUserId, input.planId, pc.channels, {
+      alreadyActive: true,
+    });
+    this.logger.log(
+      `REISSUED user=${input.tgUserId} plan=${input.planId} sub=${active.id}`,
+    );
+    return true;
+  }
+
+  /** Одноразовые join-request ссылки на каналы тарифа + сообщение подписчику. */
+  private async sendAccessLinks(
+    botId: string,
+    tgUserId: number,
+    planId: string,
+    channelsList: Array<{
+      id: string;
+      botId: string;
+      tgChatId: number;
+      title: string;
+      botStatus: string;
+    }>,
+    opts: { alreadyActive: boolean },
+  ): Promise<void> {
     const links: Array<{ title: string; url: string }> = [];
-    for (const ch of pc.channels) {
+    for (const ch of channelsList) {
       if (ch.botStatus !== 'ok') continue;
       try {
         const url = await this.tg.createJoinRequestLink(
           ch.botId,
           Number(ch.tgChatId),
-          `paid:${input.planId.slice(0, 6)}`,
+          `paid:${planId.slice(0, 6)}`,
         );
         links.push({ title: ch.title, url });
       } catch (e) {
@@ -103,14 +154,17 @@ export class FulfillmentService {
       }
     }
 
-    const body = links.length
-      ? `✅ Оплата получена, подписка активна!\n\nЗаходите в канал:\n` +
-        links.map((l) => `• <a href="${l.url}">${l.title}</a>`).join('\n')
-      : `✅ Оплата получена, подписка активна! Отправьте заявку на вступление в канал — я впущу вас.`;
+    const intro = opts.alreadyActive
+      ? '✅ У вас уже активная подписка — заходите в канал:'
+      : '✅ Оплата получена, подписка активна!\n\nЗаходите в канал:';
+    const noLinks = opts.alreadyActive
+      ? '✅ У вас уже активная подписка! Отправьте заявку на вступление в канал — я впущу вас.'
+      : '✅ Оплата получена, подписка активна! Отправьте заявку на вступление в канал — я впущу вас.';
 
-    await this.tg.sendMessage(input.botId, input.tgUserId, body);
-    this.logger.log(
-      `FULFILLED user=${input.tgUserId} plan=${input.planId} sub=${sub.id} links=${links.length}`,
-    );
+    const body = links.length
+      ? `${intro}\n\n` + links.map((l) => `• <a href="${l.url}">${l.title}</a>`).join('\n')
+      : noLinks;
+
+    await this.tg.sendMessage(botId, tgUserId, body);
   }
 }

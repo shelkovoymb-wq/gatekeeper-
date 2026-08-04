@@ -102,6 +102,17 @@ export class StorefrontService {
       const plan = (await this.plansForBot(botId)).find((p) => p.id === planId);
       if (!plan) return;
 
+      // Уже есть активная подписка на этот тариф — не просим оплатить повторно,
+      // сразу пускаем в канал по свежей ссылке.
+      const reissued = await this.fulfillment.reissueIfActive({
+        botId,
+        tgUserId,
+        username: cq.from.username,
+        firstName: cq.from.first_name,
+        planId,
+      });
+      if (reissued) return;
+
       // Бесплатный тариф — сразу выдаём доступ, без экрана оплаты.
       if (plan.price <= 0) {
         await this.fulfillment.fulfill({
