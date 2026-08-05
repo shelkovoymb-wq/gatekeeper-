@@ -1,6 +1,13 @@
 # Gatekeeper
 
 Платформа управления закрытыми Telegram-каналами (B2B2C SaaS).
+
+> **Обновление доставки апдейтов**: `/tg/webhook/:botId` ниже описывает
+> изначальный webhook-дизайн; в проде боты сейчас работают через
+> **long polling** (`apps/api/src/telegram/bot-poller.ts`) — входящие
+> webhook-соединения от Telegram блокируются на уровне сети, а long
+> polling требует только исходящих. `BotsService.register` больше не
+> вызывает `setWebhook`. Подробности и дата — в `PROGRESS.md` (Session 4).
 Хост платформы — **gatekeeper.skud24.ru** (A → 109.235.217.39). На нём Core API; кабинет (Next.js) в Фазе 1 получит отдельный поддомен (напр. `app.gatekeeper.skud24.ru`).
 
 > Архитектура и обоснование решений — в [`../docs/telegram-subscription-platform/`](../docs/telegram-subscription-platform/).
