@@ -24,7 +24,9 @@ export function OnboardingChat() {
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' })
+    // Не дёргаем страницу вниз на первой отрисовке — только когда в чате уже есть переписка.
+    if (messages.length <= 1) return
+    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [messages])
 
   const send = async (e: React.FormEvent) => {
@@ -55,14 +57,17 @@ export function OnboardingChat() {
   }
 
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/60 shadow-2xl shadow-primary-950/40 backdrop-blur-xl">
-      <div className="flex items-center gap-3 border-b border-white/10 bg-white/[0.03] px-5 py-4">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 via-secondary-500 to-accent-500 shadow-lg shadow-secondary-600/30">
-          <span className="text-base">🤖</span>
-        </div>
+    <div className="relative overflow-hidden rounded-md bg-ledger-page shadow-[0_8px_0_0_rgba(0,0,0,0.25)]">
+      <div className="flex items-center gap-3 border-b border-ledger-ink/10 bg-ledger-pageDark/50 px-5 py-4">
+        <svg viewBox="0 0 40 40" className="h-8 w-8 shrink-0 text-ledger-stamp" aria-hidden="true">
+          <circle cx="20" cy="20" r="17" fill="none" stroke="currentColor" strokeWidth="2" />
+          <circle cx="20" cy="20" r="10" fill="none" stroke="currentColor" strokeWidth="1.4" />
+        </svg>
         <div>
-          <p className="text-sm font-semibold text-white">Ассистент настройки</p>
-          <p className="text-xs text-slate-400">Настроит и зарегистрирует проект в диалоге</p>
+          <p className="font-display text-sm text-ledger-ink">Ассистент реестра</p>
+          <p className="font-ledger-mono text-[11px] uppercase tracking-wide text-ledger-ink/50">
+            Настроит и запишет проект в диалоге
+          </p>
         </div>
       </div>
 
@@ -70,52 +75,52 @@ export function OnboardingChat() {
         {messages.map((m, i) => (
           <div
             key={i}
-            className={`gk-fade-in max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
+            className={`gk-fade-in max-w-[85%] rounded-md px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
               m.role === 'user'
-                ? 'ml-auto bg-gradient-to-br from-primary-600 to-secondary-600 text-white'
-                : 'bg-white/5 text-slate-200'
+                ? 'ml-auto bg-ledger-ink text-ledger-page'
+                : 'border border-ledger-ink/10 bg-white/40 text-ledger-ink'
             }`}
           >
             {m.content}
           </div>
         ))}
         {busy && (
-          <div className="flex items-center gap-1.5 rounded-2xl bg-white/5 px-4 py-3 text-slate-400">
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.3s]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.15s]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400" />
+          <div className="flex items-center gap-1.5 rounded-md border border-ledger-ink/10 bg-white/40 px-4 py-3 text-ledger-ink/50">
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ledger-ink/50 [animation-delay:-0.3s]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ledger-ink/50 [animation-delay:-0.15s]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ledger-ink/50" />
           </div>
         )}
         <div ref={endRef} />
       </div>
 
       {registered && (
-        <div className="mx-5 mb-4 flex items-center justify-between gap-3 rounded-xl border border-success/30 bg-success/10 px-4 py-3">
-          <p className="text-sm text-emerald-300">Проект зарегистрирован — можно продолжить в кабинете.</p>
+        <div className="mx-5 mb-4 flex items-center justify-between gap-3 rounded-md border border-ledger-stamp/30 bg-ledger-stamp/10 px-4 py-3">
+          <p className="text-sm font-bold text-ledger-stampDark">Проект зарегистрирован — можно продолжить в кабинете.</p>
           <button
             onClick={() => {
               router.push('/admin/stats')
               router.refresh()
             }}
-            className="shrink-0 rounded-lg bg-success px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:brightness-110"
+            className="shrink-0 rounded-md bg-ledger-stamp px-3 py-1.5 text-xs font-bold text-ledger-page transition hover:brightness-110"
           >
             Открыть кабинет →
           </button>
         </div>
       )}
 
-      <form onSubmit={send} className="flex gap-2 border-t border-white/10 p-4">
+      <form onSubmit={send} className="flex gap-2 border-t border-ledger-ink/10 p-4">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={registered ? 'Продолжите настройку здесь или в кабинете…' : 'Напишите сообщение…'}
           disabled={busy}
-          className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition focus:border-primary-500/60 disabled:opacity-50"
+          className="flex-1 rounded-md border border-ledger-ink/15 bg-white/50 px-4 py-2.5 text-sm text-ledger-ink placeholder-ledger-ink/40 outline-none transition focus:border-ledger-stamp/60 disabled:opacity-50"
         />
         <button
           type="submit"
           disabled={busy || !input.trim()}
-          className="rounded-xl bg-gradient-to-br from-primary-500 to-secondary-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-primary-600/30 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md bg-ledger-stamp px-5 py-2.5 text-sm font-bold text-ledger-page transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
         >
           →
         </button>

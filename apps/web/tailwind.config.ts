@@ -47,10 +47,25 @@ const config: Config = {
         success: '#10B981',
         warning: '#F59E0B',
         danger: '#EF4444',
+        // Палитра лендинга: обложка гроссбуха, бумага страницы, чернила, штамп, латунь.
+        ledger: {
+          cover: '#16261E',
+          coverLight: '#1E362A',
+          page: '#F2EAD3',
+          pageDark: '#E8DEC0',
+          ink: '#23324A',
+          stamp: '#B43B2F',
+          stampDark: '#8F2E24',
+          brass: '#A9834B',
+          rule: 'rgba(35,50,74,0.16)',
+        },
       },
       fontFamily: {
         sans: ['"Inter"', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'sans-serif'],
         mono: ['"JetBrains Mono"', '"Monaco"', '"Courier New"', 'monospace'],
+        display: ['var(--font-display)', 'serif'],
+        'ledger-body': ['var(--font-ledger-body)', 'sans-serif'],
+        'ledger-mono': ['var(--font-ledger-mono)', 'monospace'],
       },
       fontSize: {
         'display': ['32px', { lineHeight: '40px', fontWeight: '700' }],

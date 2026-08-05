@@ -53,3 +53,77 @@ body {
 .gk-fade-in {
   animation: gk-fade-in 0.4s ease-out both;
 }
+
+/* Оттиск штампа на билете при загрузке лендинга — единственный поставленный момент анимации. */
+@keyframes gk-stamp-press {
+  0% {
+    opacity: 0;
+    transform: rotate(-16deg) scale(2.6);
+  }
+  55% {
+    opacity: 1;
+    transform: rotate(-11deg) scale(0.94);
+  }
+  72% {
+    transform: rotate(-13deg) scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: rotate(-12deg) scale(1);
+  }
+}
+
+.gk-stamp-press {
+  animation: gk-stamp-press 0.9s cubic-bezier(0.25, 0.8, 0.3, 1) 0.5s both;
+}
+
+/* Тихое проявление строк реестра при скролле. */
+@keyframes gk-ledger-row-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.gk-ledger-row {
+  animation: gk-ledger-row-in 0.5s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gk-stamp-press,
+  .gk-ledger-row,
+  .gk-fade-in {
+    animation: none !important;
+  }
+}
+
+/* Пробитый край билета — ряд "дырок" цвета фона обложки на левом крае карточки. */
+.gk-ticket-perforation {
+  position: relative;
+}
+.gk-ticket-perforation::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 18px;
+  background-image: radial-gradient(circle at 9px 9px, #16261e 5px, transparent 5.5px);
+  background-size: 18px 18px;
+  background-repeat: repeat-y;
+}
+
+/* Едва заметные линии разлиновки на обложке реестра — фон вместо блюр-пятен. */
+.gk-ledger-lines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(242, 234, 211, 0.055) 0,
+    rgba(242, 234, 211, 0.055) 1px,
+    transparent 1px,
+    transparent 34px
+  );
+}
