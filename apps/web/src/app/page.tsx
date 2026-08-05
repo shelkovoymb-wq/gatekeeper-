@@ -4,9 +4,9 @@ import { OnboardingChat } from '@/components/OnboardingChat'
 import { AdmissionStamp } from '@/components/AdmissionStamp'
 
 export const metadata: Metadata = {
-  title: 'Gatekeeper — реестр вашего закрытого канала',
+  title: 'Gatekeeper — доступ к вашему закрытому каналу по подписке',
   description:
-    'Gatekeeper ведёт реестр вашего платного Telegram-канала: бот принимает оплату, вписывает подписчика в список и сам вычёркивает тех, кто не продлил.',
+    'Gatekeeper сам следит за подписками в вашем платном Telegram-канале: бот принимает оплату, впускает подписчика и убирает тех, кто не продлил.',
 }
 
 const LEDGER_ROWS = [
@@ -18,7 +18,7 @@ const LEDGER_ROWS = [
   {
     n: '002',
     action: 'Делаете бота админом канала',
-    result: 'Канал сам появляется в реестре, как только бот получает права',
+    result: 'Канал появляется у вас в кабинете, как только бот получает права',
   },
   {
     n: '003',
@@ -28,14 +28,14 @@ const LEDGER_ROWS = [
   {
     n: '004',
     action: 'Включаете приём оплаты',
-    result: 'Бот готов принять первого гостя и вписать его в реестр',
+    result: 'Бот готов принять первого гостя и добавить его в список подписчиков',
   },
 ]
 
 const INDEX_CARDS = [
   {
     title: 'Никто не пройдёт мимо списка',
-    text: 'Каждый, кто входит в канал, сверяется с реестром — платформа ловит тех, кто попал в обход оплаты.',
+    text: 'Каждый, кто входит в канал, сверяется со списком подписчиков — платформа ловит тех, кто попал в обход оплаты.',
     rotate: '-rotate-2',
   },
   {
@@ -45,7 +45,7 @@ const INDEX_CARDS = [
   },
   {
     title: 'Продажа идёт без вас',
-    text: 'Подписчик платит боту, получает разовую ссылку и входит сам — вы просто открываете реестр по утрам.',
+    text: 'Подписчик платит боту, получает разовую ссылку и входит сам — вы просто заглядываете в кабинет по утрам.',
     rotate: '-rotate-1',
   },
 ]
@@ -85,7 +85,7 @@ export default function Home() {
           <div>
             <div className="mb-7 inline-flex items-center gap-2 border-b border-ledger-brass/40 pb-1 font-ledger-mono text-xs uppercase tracking-[0.25em] text-ledger-brass">
               <span className="h-1.5 w-1.5 rounded-full bg-ledger-stamp" />
-              Реестр открыт
+              Приём открыт
             </div>
             <h1 className="font-display text-4xl leading-[1.15] text-ledger-page sm:text-5xl lg:text-[3.4rem]">
               Ваш канал — закрытая дверь.
@@ -93,8 +93,8 @@ export default function Home() {
               <span className="text-ledger-stamp">Вход — по подписке.</span>
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-relaxed text-ledger-page/75">
-              Gatekeeper ведёт реестр за вас: бот принимает оплату, вписывает подписчика в список
-              и сам вычёркивает тех, кто не продлил.
+              Gatekeeper сам следит за подписчиками: бот принимает оплату, впускает нового человека
+              в канал и сам убирает тех, кто не продлил.
             </p>
             <p className="mt-6 inline-flex items-center gap-2 font-ledger-mono text-sm uppercase tracking-wide text-ledger-brass">
               👉 Спросите ассистента справа — цену, как это работает, или сразу начните регистрацию
@@ -132,7 +132,7 @@ export default function Home() {
       <section className="border-t border-ledger-page/10 bg-ledger-coverLight">
         <div className="mx-auto max-w-4xl px-6 py-20">
           <h2 className="font-display text-3xl text-ledger-page sm:text-4xl">Как это работает</h2>
-          <p className="mt-3 text-ledger-page/65">Четыре записи в реестре — и бот сам продаёт доступ в ваш канал.</p>
+          <p className="mt-3 text-ledger-page/65">Четыре шага — и бот сам продаёт доступ в ваш канал.</p>
 
           <div className="mt-10 overflow-hidden rounded-sm border border-ledger-page/15">
             <div className="hidden border-b border-ledger-page/15 bg-ledger-cover px-5 py-3 font-ledger-mono text-xs uppercase tracking-[0.2em] text-ledger-brass sm:grid sm:grid-cols-[3.5rem_16rem_1fr] sm:gap-x-4">
@@ -162,7 +162,7 @@ export default function Home() {
       {/* Приколотые карточки — почему Gatekeeper */}
       <section className="border-t border-ledger-page/10">
         <div className="mx-auto max-w-6xl px-6 py-24">
-          <h2 className="text-center font-display text-3xl text-ledger-page sm:text-4xl">Что делает реестр за вас</h2>
+          <h2 className="text-center font-display text-3xl text-ledger-page sm:text-4xl">Что бот делает за вас</h2>
           <div className="mt-14 grid gap-8 sm:grid-cols-3">
             {INDEX_CARDS.map((c) => (
               <div
@@ -181,7 +181,7 @@ export default function Home() {
       <footer className="mx-auto max-w-6xl px-6 py-10 text-center">
         <div className="mx-auto mb-4 h-px w-24 bg-ledger-brass/40" />
         <p className="font-ledger-mono text-xs uppercase tracking-[0.2em] text-ledger-page/45">
-          Реестр ведётся с {new Date().getFullYear()} года · Gatekeeper
+          Gatekeeper — с {new Date().getFullYear()} года
         </p>
       </footer>
     </div>

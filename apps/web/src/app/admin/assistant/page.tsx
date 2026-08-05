@@ -92,6 +92,8 @@ export default function AssistantPage() {
       setMessages((m) => [...m, { role: 'assistant', content: 'Ошибка связи с ассистентом.' }])
     } finally {
       setBusy(false)
+      // Клик по кнопке «Отправить» уводит фокус с поля — возвращаем его.
+      setTimeout(() => textareaRef.current?.focus(), 0)
     }
   }
 

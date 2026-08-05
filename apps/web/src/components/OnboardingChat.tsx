@@ -82,6 +82,8 @@ export function OnboardingChat() {
       setMessages((m) => [...m, { role: 'assistant', content: 'Ошибка связи с ассистентом.' }])
     } finally {
       setBusy(false)
+      // Textarea включится обратно только после ре-рендера — фокус возвращаем следующим тиком.
+      setTimeout(() => textareaRef.current?.focus(), 0)
     }
   }
 
@@ -130,9 +132,9 @@ export function OnboardingChat() {
           <circle cx="20" cy="20" r="10" fill="none" stroke="currentColor" strokeWidth="1.4" />
         </svg>
         <div>
-          <p className="font-display text-sm text-ledger-ink">Ассистент реестра</p>
+          <p className="font-display text-sm text-ledger-ink">Ассистент Gatekeeper</p>
           <p className="font-ledger-mono text-[11px] uppercase tracking-wide text-ledger-ink/50">
-            Настроит и запишет проект в диалоге
+            Настроит проект прямо в диалоге
           </p>
         </div>
       </div>
