@@ -34,14 +34,14 @@ export default function OwnerPlansPage() {
   return (
     <div>
       <header className="mb-8">
-        <h1 className="text-2xl font-bold text-white md:text-3xl">Тарифы платформы</h1>
-        <p className="mt-1 text-sm text-slate-400">
+        <h1 className="font-display text-2xl text-ledger-page md:text-3xl">Тарифы платформы</h1>
+        <p className="mt-1 text-sm text-ledger-page/60">
           Планы, по которым клиенты пользуются платформой (абонплата + комиссия)
         </p>
       </header>
 
       {error && (
-        <div className="mb-6 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-red-300">
+        <div className="mb-6 rounded-sm border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-red-300">
           {error}
         </div>
       )}
@@ -51,7 +51,7 @@ export default function OwnerPlansPage() {
           {Array.from({ length: 3 }).map((_, i) => (
             <div
               key={i}
-              className="h-56 animate-pulse rounded-2xl border border-slate-800 bg-slate-900/60"
+              className="h-56 animate-pulse rounded-sm bg-ledger-page/10"
             />
           ))}
         </div>
@@ -60,33 +60,33 @@ export default function OwnerPlansPage() {
           {rows.map((p) => (
             <div
               key={p.id}
-              className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 p-7"
+              className="relative overflow-hidden rounded-sm bg-ledger-page p-7 text-ledger-ink shadow-[4px_6px_0_0_rgba(0,0,0,0.25)]"
             >
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold text-white">{p.name}</h2>
+                <h2 className="text-lg font-bold text-ledger-ink">{p.name}</h2>
                 {!p.isActive && (
-                  <span className="rounded-lg bg-slate-700/60 px-2 py-1 text-xs text-slate-400">
+                  <span className="rounded-sm bg-ledger-ink/10 px-2 py-1 font-ledger-mono text-xs text-ledger-ink/50">
                     выкл
                   </span>
                 )}
               </div>
-              <div className="mt-4 text-3xl font-bold tracking-tight text-white">
+              <div className="mt-4 font-display text-3xl tracking-tight text-ledger-ink">
                 {p.priceMonth > 0 ? formatMoney(p.priceMonth, p.currency) : 'Бесплатно'}
                 {p.priceMonth > 0 && (
-                  <span className="text-base font-medium text-slate-400"> / мес</span>
+                  <span className="text-base font-medium text-ledger-ink/55"> / мес</span>
                 )}
               </div>
-              <div className="mt-5 space-y-2 text-sm text-slate-300">
+              <div className="mt-5 space-y-2 text-sm text-ledger-ink/60">
                 <div className="flex items-center gap-2">
-                  <span className="text-emerald-400">💰</span>
+                  <span className="text-emerald-700">💰</span>
                   <span>
                     Комиссия платформы:{' '}
-                    <span className="font-semibold text-white">{p.commissionPct}%</span>
+                    <span className="font-semibold text-ledger-ink">{p.commissionPct}%</span>
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-500">🏷️</span>
-                  <span className="text-slate-400">код: {p.code}</span>
+                  <span className="text-ledger-ink/45">🏷️</span>
+                  <span className="font-ledger-mono text-ledger-ink/55">код: {p.code}</span>
                 </div>
               </div>
             </div>

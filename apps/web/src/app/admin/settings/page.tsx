@@ -86,13 +86,13 @@ export default function SettingsPage() {
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="text-2xl font-bold text-white md:text-3xl">Настройка</h1>
-        <p className="mt-1 text-sm text-slate-400">Боты и приём платежей</p>
+        <h1 className="font-display text-2xl text-ledger-page md:text-3xl">Настройка</h1>
+        <p className="mt-1 text-sm text-ledger-page/60">Боты и приём платежей</p>
       </header>
 
       {msg && (
         <div
-          className={`rounded-xl px-4 py-2.5 text-sm ${
+          className={`rounded-sm px-4 py-2.5 text-sm ${
             msg.type === 'ok'
               ? 'border border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
               : 'border border-danger/40 bg-danger/10 text-red-300'
@@ -103,21 +103,21 @@ export default function SettingsPage() {
       )}
 
       {/* Боты */}
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-        <h2 className="mb-4 text-lg font-semibold text-white">Telegram-боты</h2>
+      <section className="rounded-sm bg-ledger-page p-6 text-ledger-ink shadow-[4px_6px_0_0_rgba(0,0,0,0.25)]">
+        <h2 className="mb-4 text-lg font-bold text-ledger-ink">Telegram-боты</h2>
         {bots.length > 0 && (
           <ul className="mb-4 space-y-2">
             {bots.map((b) => (
               <li
                 key={b.id}
-                className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3"
+                className="flex items-center justify-between rounded-sm border border-ledger-ink/10 bg-ledger-pageDark px-4 py-3"
               >
-                <span className="font-medium text-white">@{b.username}</span>
+                <span className="font-medium text-ledger-ink">@{b.username}</span>
                 <span
-                  className={`rounded-full px-2.5 py-1 text-xs ${
+                  className={`rounded-sm px-2.5 py-1 text-xs ${
                     b.status === 'active'
-                      ? 'bg-emerald-500/10 text-emerald-400'
-                      : 'bg-amber-500/10 text-amber-400'
+                      ? 'bg-emerald-500/10 text-emerald-700'
+                      : 'bg-amber-500/10 text-amber-700'
                   }`}
                 >
                   {b.status === 'active' ? 'активен' : b.status}
@@ -131,12 +131,12 @@ export default function SettingsPage() {
             value={token}
             onChange={(e) => setToken(e.target.value)}
             placeholder="Токен от @BotFather (123456:ABC...)"
-            className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-2.5 text-sm text-white placeholder-slate-600 outline-none focus:border-primary-500"
+            className="min-w-0 flex-1 rounded-sm border border-ledger-ink/15 bg-white/50 px-4 py-2.5 text-sm text-ledger-ink placeholder-ledger-ink/35 outline-none focus:border-ledger-stamp/60"
           />
           <button
             type="submit"
             disabled={busy || !token.trim()}
-            className="shrink-0 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-500 disabled:opacity-50"
+            className="shrink-0 rounded-sm bg-ledger-stamp px-4 py-2.5 text-sm font-bold text-ledger-page hover:brightness-110 disabled:opacity-50"
           >
             Подключить
           </button>
@@ -145,7 +145,7 @@ export default function SettingsPage() {
 
       {/* Платежи */}
       <section>
-        <h2 className="mb-4 text-lg font-semibold text-white">Платёжные системы</h2>
+        <h2 className="mb-4 text-lg font-bold text-ledger-page">Платёжные системы</h2>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           {cfgs.map((c) => (
             <ProviderCard key={c.provider} cfg={c} onSaved={load} setMsg={setMsg} />
@@ -192,14 +192,14 @@ function ProviderCard({
   }
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+    <div className="rounded-sm bg-ledger-page p-5 text-ledger-ink shadow-[4px_6px_0_0_rgba(0,0,0,0.25)]">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="font-semibold text-white">{meta.label}</h3>
+        <h3 className="font-bold text-ledger-ink">{meta.label}</h3>
         <span
-          className={`rounded-full px-2.5 py-1 text-xs ${
+          className={`rounded-sm px-2.5 py-1 text-xs ${
             cfg.configured && cfg.isActive
-              ? 'bg-emerald-500/10 text-emerald-400'
-              : 'bg-slate-700/40 text-slate-400'
+              ? 'bg-emerald-500/10 text-emerald-700'
+              : 'bg-ledger-ink/10 text-ledger-ink/50'
           }`}
         >
           {cfg.configured && cfg.isActive ? 'подключён' : 'выключен'}
@@ -214,27 +214,27 @@ function ProviderCard({
               placeholder={f.label}
               value={values[f.key] ?? ''}
               onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-              className="w-full rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-white placeholder-slate-600 outline-none focus:border-primary-500"
+              className="w-full rounded-sm border border-ledger-ink/15 bg-white/50 px-3 py-2 text-sm text-ledger-ink placeholder-ledger-ink/35 outline-none focus:border-ledger-stamp/60"
             />
           ))}
           <button
             onClick={() => save(true)}
             disabled={busy}
-            className="mt-1 w-full rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-500 disabled:opacity-50"
+            className="mt-1 w-full rounded-sm bg-ledger-stamp px-4 py-2 text-sm font-bold text-ledger-page hover:brightness-110 disabled:opacity-50"
           >
             {busy ? '…' : 'Сохранить и включить'}
           </button>
         </div>
       ) : (
         <div className="space-y-2">
-          <p className="text-sm text-slate-400">Ключи не требуются — оплата звёздами Telegram.</p>
+          <p className="text-sm text-ledger-ink/55">Ключи не требуются — оплата звёздами Telegram.</p>
           <button
             onClick={() => save(!cfg.isActive)}
             disabled={busy}
-            className={`w-full rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50 ${
+            className={`w-full rounded-sm px-4 py-2 text-sm font-medium disabled:opacity-50 ${
               cfg.isActive
-                ? 'border border-slate-700 text-slate-300 hover:bg-slate-800'
-                : 'bg-primary-600 text-white hover:bg-primary-500'
+                ? 'border border-ledger-ink/20 text-ledger-ink hover:bg-ledger-ink/5'
+                : 'bg-ledger-stamp text-ledger-page font-bold hover:brightness-110'
             }`}
           >
             {cfg.isActive ? 'Выключить' : 'Включить'}

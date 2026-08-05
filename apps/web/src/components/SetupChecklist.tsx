@@ -86,10 +86,10 @@ export function SetupChecklist() {
   if (allDone) return null
 
   return (
-    <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div className="mb-6 rounded-sm bg-ledger-page p-6 text-ledger-ink shadow-[4px_6px_0_0_rgba(0,0,0,0.25)]">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-white">Быстрая настройка</h2>
-        <span className="text-sm text-slate-400">
+        <h2 className="font-display text-lg text-ledger-ink">Быстрая настройка</h2>
+        <span className="font-ledger-mono text-sm text-ledger-ink/50">
           {steps.filter((s) => s.done).length}/{steps.length}
         </span>
       </div>
@@ -98,17 +98,17 @@ export function SetupChecklist() {
         {steps.map((s, i) => (
           <li key={s.key} className="flex items-start gap-3">
             <span
-              className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                s.done ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'
+              className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-ledger-mono text-xs font-bold ${
+                s.done ? 'bg-success/20 text-emerald-700' : 'bg-ledger-ink/10 text-ledger-ink/50'
               }`}
             >
               {s.done ? '✓' : i + 1}
             </span>
             <div className="min-w-0">
-              <p className={`text-sm font-medium ${s.done ? 'text-slate-400 line-through' : 'text-white'}`}>
+              <p className={`text-sm font-bold ${s.done ? 'text-ledger-ink/40 line-through' : 'text-ledger-ink'}`}>
                 {s.title}
               </p>
-              <p className="text-xs text-slate-500">{s.hint}</p>
+              <p className="text-xs text-ledger-ink/50">{s.hint}</p>
 
               {s.key === 'bot' && !s.done && (
                 <form onSubmit={connect} className="mt-2 flex gap-2">
@@ -116,24 +116,24 @@ export function SetupChecklist() {
                     value={token}
                     onChange={(e) => setToken(e.target.value)}
                     placeholder="123456:ABC-DEF..."
-                    className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-white placeholder-slate-600 outline-none focus:border-primary-500"
+                    className="min-w-0 flex-1 rounded-sm border border-ledger-ink/15 bg-white/50 px-3 py-2 text-sm text-ledger-ink placeholder-ledger-ink/35 outline-none focus:border-ledger-stamp/60"
                   />
                   <button
                     type="submit"
                     disabled={busy || !token.trim()}
-                    className="shrink-0 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-500 disabled:opacity-50"
+                    className="shrink-0 rounded-sm bg-ledger-stamp px-4 py-2 text-sm font-bold text-ledger-page hover:brightness-110 disabled:opacity-50"
                   >
                     {busy ? '…' : 'Подключить'}
                   </button>
                 </form>
               )}
               {s.key === 'tariff' && !s.done && bots.length > 0 && (
-                <Link href="/admin/tariffs" className="mt-1 inline-block text-xs text-primary-300 hover:text-primary-200">
+                <Link href="/admin/tariffs" className="mt-1 inline-block text-xs font-bold text-ledger-stamp hover:brightness-110">
                   Перейти к тарифам →
                 </Link>
               )}
               {s.key === 'pay' && !s.done && (
-                <Link href="/admin/settings" className="mt-1 inline-block text-xs text-primary-300 hover:text-primary-200">
+                <Link href="/admin/settings" className="mt-1 inline-block text-xs font-bold text-ledger-stamp hover:brightness-110">
                   Настроить оплату →
                 </Link>
               )}
@@ -144,10 +144,10 @@ export function SetupChecklist() {
 
       {msg && (
         <div
-          className={`mt-4 rounded-xl px-4 py-2.5 text-sm ${
+          className={`mt-4 rounded-sm px-4 py-2.5 text-sm ${
             msg.type === 'ok'
-              ? 'border border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-              : 'border border-danger/40 bg-danger/10 text-red-300'
+              ? 'border border-success/40 bg-success/10 text-emerald-700'
+              : 'border border-danger/40 bg-danger/10 text-red-700'
           }`}
         >
           {msg.text}

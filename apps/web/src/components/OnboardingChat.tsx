@@ -15,6 +15,10 @@ const GREETING: Msg = {
     'зарегистрирую проект, подключу бота, создам тариф и включу оплату. С чего начнём?',
 }
 
+const DRAFT_KEY = 'gk_onboarding_draft'
+const ASSISTANT_HISTORY_PREFIX = 'gk_assistant_chat_'
+const MAX_TEXTAREA_HEIGHT = 160
+
 export function OnboardingChat() {
   const router = useRouter()
   const [messages, setMessages] = useState<Msg[]>([GREETING])
@@ -22,6 +26,28 @@ export function OnboardingChat() {
   const [busy, setBusy] = useState(false)
   const [registered, setRegistered] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Восстанавливаем черновик диалога, если посетитель обновил страницу до регистрации.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY)
+      const parsed = raw ? JSON.parse(raw) : null
+      if (Array.isArray(parsed) && parsed.length > 0) setMessages(parsed)
+    } catch {
+      /* ignore corrupted storage */
+    }
+  }, [])
+
+  // Сохраняем черновик на каждое изменение — переживает обновление страницы.
+  useEffect(() => {
+    if (registered) return
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(messages))
+    } catch {
+      /* хранилище недоступно — не критично */
+    }
+  }, [messages, registered])
 
   useEffect(() => {
     // Не дёргаем страницу вниз на первой отрисовке — только когда в чате уже есть переписка.
@@ -29,13 +55,13 @@ export function OnboardingChat() {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [messages])
 
-  const send = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const send = async () => {
     const text = input.trim()
     if (!text || busy) return
     const next = [...messages, { role: 'user' as const, content: text }]
     setMessages(next)
     setInput('')
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
     setBusy(true)
     try {
       const r = await fetch('/api/onboarding', {
@@ -45,15 +71,53 @@ export function OnboardingChat() {
       })
       const d = await r.json()
       const reply = d?.data?.reply || d?.error || 'Не удалось получить ответ.'
-      setMessages((m) => [...m, { role: 'assistant', content: reply }])
+      const withReply = [...next, { role: 'assistant' as const, content: reply }]
+      setMessages(withReply)
       if (d?.data?.registered) {
-        setRegistered(true)
+        await finalizeRegistration(withReply)
       }
     } catch {
       setMessages((m) => [...m, { role: 'assistant', content: 'Ошибка связи с ассистентом.' }])
     } finally {
       setBusy(false)
     }
+  }
+
+  // Переносим диалог в историю кабинетного ассистента, чтобы после перехода
+  // настройка продолжилась с той же перепиской, а не с чистого листа.
+  const finalizeRegistration = async (transcript: Msg[]) => {
+    try {
+      const r = await fetch('/api/auth/me')
+      const d = await r.json()
+      const clientId: string | undefined = d?.data?.clientId
+      if (clientId) {
+        const forCabinet = transcript.filter((m) => m !== GREETING)
+        localStorage.setItem(ASSISTANT_HISTORY_PREFIX + clientId, JSON.stringify(forCabinet))
+      }
+      localStorage.removeItem(DRAFT_KEY)
+    } catch {
+      /* перенос истории не критичен — кабинет всё равно откроется */
+    }
+    setRegistered(true)
+  }
+
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    void send()
+  }
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Ctrl+Enter (Cmd+Enter на Mac) — отправить. Обычный Enter и Shift+Enter — перенос строки.
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault()
+      void send()
+    }
+  }
+
+  const onInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
+    const el = e.currentTarget
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT)}px`
   }
 
   return (
@@ -96,31 +160,39 @@ export function OnboardingChat() {
 
       {registered && (
         <div className="mx-5 mb-4 flex items-center justify-between gap-3 rounded-md border border-ledger-stamp/30 bg-ledger-stamp/10 px-4 py-3">
-          <p className="text-sm font-bold text-ledger-stampDark">Проект зарегистрирован — можно продолжить в кабинете.</p>
+          <p className="text-sm font-bold text-ledger-stampDark">Проект зарегистрирован — продолжим в кабинете.</p>
           <button
             onClick={() => {
-              router.push('/admin/stats')
+              router.push('/admin/assistant')
               router.refresh()
             }}
             className="shrink-0 rounded-md bg-ledger-stamp px-3 py-1.5 text-xs font-bold text-ledger-page transition hover:brightness-110"
           >
-            Открыть кабинет →
+            Продолжить настройку →
           </button>
         </div>
       )}
 
-      <form onSubmit={send} className="flex gap-2 border-t border-ledger-ink/10 p-4">
-        <input
+      <form onSubmit={onSubmit} className="flex items-end gap-2 border-t border-ledger-ink/10 p-4">
+        <textarea
+          ref={textareaRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={registered ? 'Продолжите настройку здесь или в кабинете…' : 'Напишите сообщение…'}
+          onInput={onInput}
+          onKeyDown={onKeyDown}
+          placeholder={
+            registered
+              ? 'Продолжите настройку здесь или в кабинете…'
+              : 'Напишите сообщение… (Ctrl+Enter — отправить, Shift+Enter — новая строка)'
+          }
           disabled={busy}
-          className="flex-1 rounded-md border border-ledger-ink/15 bg-white/50 px-4 py-2.5 text-sm text-ledger-ink placeholder-ledger-ink/40 outline-none transition focus:border-ledger-stamp/60 disabled:opacity-50"
+          rows={1}
+          className="flex-1 resize-none rounded-md border border-ledger-ink/15 bg-white/50 px-4 py-2.5 text-sm text-ledger-ink placeholder-ledger-ink/40 outline-none transition focus:border-ledger-stamp/60 disabled:opacity-50"
         />
         <button
           type="submit"
           disabled={busy || !input.trim()}
-          className="rounded-md bg-ledger-stamp px-5 py-2.5 text-sm font-bold text-ledger-page transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+          className="shrink-0 rounded-md bg-ledger-stamp px-5 py-2.5 text-sm font-bold text-ledger-page transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
         >
           →
         </button>

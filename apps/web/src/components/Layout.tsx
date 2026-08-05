@@ -28,6 +28,16 @@ const ownerNav = [
   { href: '/owner/settings', label: 'Настройки', icon: '⚙️' },
 ]
 
+function SealMark({ className = 'h-9 w-9' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 40 40" className={className} aria-hidden="true">
+      <circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" strokeWidth="2" />
+      <circle cx="20" cy="16" r="5.5" fill="currentColor" />
+      <path d="M20 21 L14 30 L26 30 Z" fill="currentColor" />
+    </svg>
+  )
+}
+
 export function Layout({ children }: LayoutProps) {
   const pathname = usePathname()
   const router = useRouter()
@@ -62,17 +72,17 @@ export function Layout({ children }: LayoutProps) {
 
   const NavContent = (
     <>
-      <div className="mb-8 flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-500 via-secondary-500 to-accent-500 shadow-lg shadow-primary-600/30">
-          <span className="text-xl">🛡️</span>
-        </div>
+      <Link href="/" className="mb-8 flex items-center gap-3 transition hover:opacity-80">
+        <SealMark className="h-10 w-10 text-ledger-brass" />
         <div className="min-w-0">
-          <h1 className="truncate text-lg font-bold leading-tight text-white">Gatekeeper</h1>
-          <p className="truncate text-xs text-slate-400">{subtitle}</p>
+          <h1 className="truncate font-display text-lg leading-tight text-ledger-page">Gatekeeper</h1>
+          <p className="truncate font-ledger-mono text-[11px] uppercase tracking-wide text-ledger-page/50">
+            {subtitle}
+          </p>
         </div>
-      </div>
+      </Link>
 
-      <nav className="space-y-1.5">
+      <nav className="space-y-1">
         {navItems.map((item) => {
           const isActive = pathname?.startsWith(item.href) ?? false
           return (
@@ -81,10 +91,10 @@ export function Layout({ children }: LayoutProps) {
               href={item.href}
               onClick={() => setMobileOpen(false)}
               className={clsx(
-                'flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-standard',
+                'flex items-center gap-3 rounded-sm border-l-2 px-4 py-2.5 text-sm font-bold transition-all duration-standard',
                 isActive
-                  ? 'bg-gradient-to-r from-primary-600/90 to-secondary-600/90 text-white shadow-lg shadow-primary-600/25'
-                  : 'text-slate-400 hover:bg-slate-800/70 hover:text-white',
+                  ? 'border-ledger-stamp bg-ledger-page/10 text-ledger-page'
+                  : 'border-transparent text-ledger-page/55 hover:bg-ledger-page/5 hover:text-ledger-page',
               )}
             >
               <span className="text-lg">{item.icon}</span>
@@ -94,15 +104,15 @@ export function Layout({ children }: LayoutProps) {
         })}
       </nav>
 
-      <div className="mt-auto space-y-3 border-t border-slate-800 pt-5">
+      <div className="mt-auto space-y-3 border-t border-ledger-page/10 pt-5">
         <button
           onClick={logout}
-          className="flex w-full items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-400 transition-colors hover:bg-slate-800/70 hover:text-white"
+          className="flex w-full items-center gap-2 rounded-sm px-4 py-2.5 text-sm font-bold text-ledger-page/55 transition-colors hover:bg-ledger-page/5 hover:text-ledger-page"
         >
           <span className="text-lg">🚪</span>
           <span>Выйти</span>
         </button>
-        <div className="flex items-center gap-2 px-1 text-xs text-slate-500">
+        <div className="flex items-center gap-2 px-1 font-ledger-mono text-[11px] uppercase tracking-wide text-ledger-page/40">
           <span className="h-2 w-2 rounded-full bg-success shadow-[0_0_8px] shadow-success" />
           <span>Система работает</span>
         </div>
@@ -111,9 +121,9 @@ export function Layout({ children }: LayoutProps) {
   )
 
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-100">
+    <div className="flex min-h-screen bg-ledger-cover font-ledger-body text-ledger-page">
       {/* Desktop sidebar */}
-      <aside className="hidden w-72 shrink-0 flex-col border-r border-slate-800 bg-slate-900/60 p-6 backdrop-blur-glass md:flex">
+      <aside className="hidden w-72 shrink-0 flex-col border-r border-ledger-page/10 bg-ledger-coverLight p-6 md:flex">
         {NavContent}
       </aside>
 
@@ -124,7 +134,7 @@ export function Layout({ children }: LayoutProps) {
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col border-r border-slate-800 bg-slate-900 p-6 shadow-2xl gk-fade-in">
+          <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col border-r border-ledger-page/10 bg-ledger-coverLight p-6 shadow-2xl gk-fade-in">
             {NavContent}
           </aside>
         </div>
@@ -133,15 +143,15 @@ export function Layout({ children }: LayoutProps) {
       {/* Main content */}
       <main className="flex-1 overflow-auto">
         {/* Mobile top bar with hamburger */}
-        <div className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-800 bg-slate-900/80 px-4 py-3 backdrop-blur-glass md:hidden">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">🛡️</span>
-            <span className="font-bold text-white">Gatekeeper</span>
-          </div>
+        <div className="sticky top-0 z-30 flex items-center justify-between border-b border-ledger-page/10 bg-ledger-coverLight/90 px-4 py-3 backdrop-blur-glass md:hidden">
+          <Link href="/" className="flex items-center gap-2">
+            <SealMark className="h-6 w-6 text-ledger-brass" />
+            <span className="font-display text-base text-ledger-page">Gatekeeper</span>
+          </Link>
           <button
             onClick={() => setMobileOpen(true)}
             aria-label="Меню"
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-700 bg-slate-800/60 text-slate-200 active:bg-slate-700"
+            className="flex h-10 w-10 items-center justify-center rounded-sm border border-ledger-page/15 bg-ledger-page/5 text-ledger-page active:bg-ledger-page/10"
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <line x1="3" y1="6" x2="21" y2="6" />

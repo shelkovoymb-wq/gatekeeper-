@@ -100,12 +100,12 @@ export default function TariffsPage() {
   return (
     <div>
       <header className="mb-8">
-        <h1 className="text-2xl font-bold text-white md:text-3xl">Тарифы</h1>
-        <p className="mt-1 text-sm text-slate-400">Планы подписки для ваших каналов</p>
+        <h1 className="font-display text-2xl text-ledger-page md:text-3xl">Тарифы</h1>
+        <p className="mt-1 text-sm text-ledger-page/60">Планы подписки для ваших каналов</p>
       </header>
 
       {error && (
-        <div className="mb-6 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-red-300">
+        <div className="mb-6 rounded-sm border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-red-300">
           {error}
         </div>
       )}
@@ -114,9 +114,9 @@ export default function TariffsPage() {
         {/* Форма создания */}
         <form
           onSubmit={create}
-          className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 lg:col-span-1"
+          className="rounded-sm bg-ledger-page p-6 text-ledger-ink shadow-[4px_6px_0_0_rgba(0,0,0,0.25)] lg:col-span-1"
         >
-          <h2 className="mb-4 text-lg font-semibold text-white">Новый тариф</h2>
+          <h2 className="mb-4 text-lg font-bold text-ledger-ink">Новый тариф</h2>
           <div className="space-y-4">
             <Input label="Название" value={name} onChange={setName} placeholder="Базовый" required />
             <Input
@@ -128,11 +128,11 @@ export default function TariffsPage() {
               required
             />
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-300">Период</span>
+              <span className="mb-1.5 block text-sm font-medium text-ledger-ink/60">Период</span>
               <select
                 value={periodDays}
                 onChange={(e) => setPeriodDays(Number(e.target.value))}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-2.5 text-sm text-white outline-none focus:border-primary-500"
+                className="w-full rounded-sm border border-ledger-ink/15 bg-white/50 px-4 py-2.5 text-sm text-ledger-ink outline-none focus:border-ledger-stamp/60"
               >
                 {periods.map((p) => (
                   <option key={p.v} value={p.v}>
@@ -150,15 +150,15 @@ export default function TariffsPage() {
             />
             {channels.length > 0 && (
               <div>
-                <span className="mb-1.5 block text-sm font-medium text-slate-300">Каналы</span>
+                <span className="mb-1.5 block text-sm font-medium text-ledger-ink/60">Каналы</span>
                 <div className="space-y-2">
                   {channels.map((c) => (
-                    <label key={c.id} className="flex items-center gap-2 text-sm text-slate-300">
+                    <label key={c.id} className="flex items-center gap-2 text-sm text-ledger-ink/60">
                       <input
                         type="checkbox"
                         checked={selChannels.includes(c.id)}
                         onChange={() => toggleChannel(c.id)}
-                        className="h-4 w-4 rounded border-slate-600 bg-slate-800"
+                        className="h-4 w-4 rounded border-ledger-ink/25 bg-white/50 accent-ledger-stamp"
                       />
                       {c.name}
                     </label>
@@ -169,7 +169,7 @@ export default function TariffsPage() {
             <button
               type="submit"
               disabled={busy}
-              className="w-full rounded-xl bg-gradient-to-r from-primary-600 to-secondary-600 px-4 py-2.5 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-50"
+              className="w-full rounded-sm bg-ledger-stamp px-4 py-2.5 text-sm font-bold text-ledger-page hover:brightness-110 disabled:opacity-50"
             >
               {busy ? 'Создаём…' : 'Создать тариф'}
             </button>
@@ -179,34 +179,34 @@ export default function TariffsPage() {
         {/* Список */}
         <div className="lg:col-span-2">
           {loading ? (
-            <div className="h-40 animate-pulse rounded-2xl border border-slate-800 bg-slate-900/60" />
+            <div className="h-40 animate-pulse rounded-sm bg-ledger-page/10" />
           ) : plans.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 p-12 text-center">
+            <div className="rounded-sm border border-dashed border-ledger-page/20 p-12 text-center">
               <div className="mb-3 text-4xl">🏷️</div>
-              <p className="text-slate-300">Тарифов пока нет</p>
-              <p className="mt-1 text-sm text-slate-500">Создайте первый тариф слева</p>
+              <p className="text-ledger-page/70">Тарифов пока нет</p>
+              <p className="mt-1 text-sm text-ledger-page/45">Создайте первый тариф слева</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {plans.map((p) => (
-                <div key={p.id} className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+                <div key={p.id} className="rounded-sm bg-ledger-page p-5 text-ledger-ink shadow-[4px_6px_0_0_rgba(0,0,0,0.25)]">
                   <div className="flex items-start justify-between">
-                    <h3 className="font-semibold text-white">{p.name}</h3>
+                    <h3 className="font-bold text-ledger-ink">{p.name}</h3>
                     <button
                       onClick={() => remove(p.id)}
-                      className="text-xs text-slate-500 hover:text-red-400"
+                      className="text-xs text-ledger-ink/45 hover:text-ledger-stampDark"
                     >
                       Удалить
                     </button>
                   </div>
-                  <p className="mt-2 text-2xl font-bold text-primary-300">
+                  <p className="mt-2 text-2xl font-bold text-ledger-stamp">
                     {formatMoney(p.price, p.currency)}
                   </p>
-                  <p className="mt-1 text-sm text-slate-400">
+                  <p className="mt-1 text-sm text-ledger-ink/55">
                     {p.periodDays === 0 ? 'навсегда' : `на ${p.periodDays} дн.`}
                     {p.trialDays > 0 && ` · триал ${p.trialDays} дн.`}
                   </p>
-                  <p className="mt-2 text-xs text-slate-500">
+                  <p className="mt-2 text-xs text-ledger-ink/45">
                     Каналов: {p.channelIds.length || '—'}
                   </p>
                 </div>
@@ -229,14 +229,14 @@ function Input(props: {
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-sm font-medium text-slate-300">{props.label}</span>
+      <span className="mb-1.5 block text-sm font-medium text-ledger-ink/60">{props.label}</span>
       <input
         type={props.type ?? 'text'}
         value={props.value}
         onChange={(e) => props.onChange(e.target.value)}
         placeholder={props.placeholder}
         required={props.required}
-        className="w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-2.5 text-sm text-white placeholder-slate-600 outline-none focus:border-primary-500"
+        className="w-full rounded-sm border border-ledger-ink/15 bg-white/50 px-4 py-2.5 text-sm text-ledger-ink placeholder-ledger-ink/35 outline-none focus:border-ledger-stamp/60"
       />
     </label>
   )

@@ -29,14 +29,14 @@ export default function StatsPage() {
   return (
     <div>
       <header className="mb-8">
-        <h1 className="text-2xl font-bold text-white md:text-3xl">Обзор</h1>
-        <p className="mt-1 text-sm text-slate-400">
+        <h1 className="font-display text-2xl text-ledger-page md:text-3xl">Обзор</h1>
+        <p className="mt-1 text-sm text-ledger-page/60">
           Сводка по каналам, подписчикам и выручке платформы
         </p>
       </header>
 
       {error && (
-        <div className="mb-6 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-red-300">
+        <div className="mb-6 rounded-sm border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-red-300">
           {error}
         </div>
       )}
@@ -46,10 +46,7 @@ export default function StatsPage() {
       {isLoading && !stats ? (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-32 animate-pulse rounded-2xl border border-slate-800 bg-slate-900/60"
-            />
+            <div key={i} className="h-32 animate-pulse rounded-sm bg-ledger-page/10" />
           ))}
         </div>
       ) : stats ? (
@@ -86,29 +83,33 @@ export default function StatsPage() {
           </div>
 
           <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-3">
-            <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-br from-emerald-600/15 via-slate-900/60 to-slate-900/60 p-8 lg:col-span-2">
-              <p className="text-sm font-medium text-slate-300">Общая выручка</p>
-              <div className="mt-3 text-4xl font-bold tracking-tight text-emerald-400 md:text-5xl">
+            <div className="rounded-sm bg-ledger-page p-8 text-ledger-ink shadow-[4px_6px_0_0_rgba(0,0,0,0.25)] lg:col-span-2">
+              <p className="font-ledger-mono text-xs uppercase tracking-wide text-ledger-ink/50">
+                Общая выручка
+              </p>
+              <div className="mt-3 font-display text-4xl tracking-tight text-ledger-stamp md:text-5xl">
                 {formatMoney(stats.totalRevenue)}
               </div>
-              <p className="mt-2 text-sm text-slate-400">
+              <p className="mt-2 text-sm text-ledger-ink/55">
                 Сумма всех успешно проведённых платежей
               </p>
             </div>
 
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-8">
-              <p className="text-sm font-medium text-slate-300">Средний чек</p>
-              <div className="mt-3 text-3xl font-bold text-white">
+            <div className="rounded-sm bg-ledger-page p-8 text-ledger-ink shadow-[4px_6px_0_0_rgba(0,0,0,0.25)]">
+              <p className="font-ledger-mono text-xs uppercase tracking-wide text-ledger-ink/50">
+                Средний чек
+              </p>
+              <div className="mt-3 font-display text-3xl text-ledger-ink">
                 {formatMoney(
                   stats.messageCount > 0 ? stats.totalRevenue / stats.messageCount : 0,
                 )}
               </div>
-              <p className="mt-2 text-sm text-slate-400">Выручка на одну подписку</p>
+              <p className="mt-2 text-sm text-ledger-ink/55">Выручка на одну подписку</p>
             </div>
           </div>
         </>
       ) : (
-        <p className="text-slate-500">Нет данных</p>
+        <p className="text-ledger-page/50">Нет данных</p>
       )}
     </div>
   )

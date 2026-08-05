@@ -22,10 +22,10 @@ interface Invoice {
 }
 
 const statusBadge: Record<string, string> = {
-  paid: 'bg-emerald-600/20 text-emerald-300',
-  pending: 'bg-amber-600/20 text-amber-300',
-  overdue: 'bg-danger/20 text-red-300',
-  void: 'bg-slate-700/60 text-slate-400',
+  paid: 'bg-emerald-500/10 text-emerald-700',
+  pending: 'bg-amber-500/10 text-amber-700',
+  overdue: 'bg-danger/10 text-red-700',
+  void: 'bg-ledger-ink/10 text-ledger-ink/50',
 }
 
 export default function OwnerBillingPage() {
@@ -82,22 +82,22 @@ export default function OwnerBillingPage() {
     <div>
       <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white md:text-3xl">Биллинг платформы</h1>
-          <p className="mt-1 text-sm text-slate-400">
+          <h1 className="font-display text-2xl text-ledger-page md:text-3xl">Биллинг платформы</h1>
+          <p className="mt-1 text-sm text-ledger-page/60">
             Счета клиентам: абонплата тарифа + комиссия с оборота
           </p>
         </div>
         <button
           onClick={generate}
           disabled={busy}
-          className="rounded-xl bg-gradient-to-r from-primary-600 to-secondary-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-primary-600/25 transition hover:opacity-90 disabled:opacity-50"
+          className="rounded-sm bg-ledger-stamp px-5 py-2.5 text-sm font-bold text-ledger-page transition hover:brightness-110 disabled:opacity-50"
         >
           {busy ? 'Обработка…' : 'Сгенерировать за текущий месяц'}
         </button>
       </header>
 
       {error && (
-        <div className="mb-6 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-red-300">
+        <div className="mb-6 rounded-sm border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-red-300">
           {error}
         </div>
       )}
@@ -112,14 +112,14 @@ export default function OwnerBillingPage() {
       )}
 
       {loading ? (
-        <div className="h-64 animate-pulse rounded-2xl border border-slate-800 bg-slate-900/60" />
+        <div className="h-64 animate-pulse rounded-sm bg-ledger-page/10" />
       ) : invoices.length === 0 ? (
-        <p className="text-slate-500">Счетов пока нет — сгенерируй за период.</p>
+        <p className="text-ledger-page/45">Счетов пока нет — сгенерируй за период.</p>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/60">
-          <table className="w-full min-w-[820px] text-sm">
+        <div className="overflow-x-auto rounded-sm border border-ledger-page/15">
+          <table className="w-full min-w-[820px] text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-800 text-left text-xs uppercase tracking-wide text-slate-500">
+              <tr className="border-b border-ledger-page/15 bg-ledger-cover font-ledger-mono text-xs uppercase tracking-wide text-ledger-brass">
                 <th className="px-5 py-3 font-medium">Клиент</th>
                 <th className="px-5 py-3 font-medium">Период</th>
                 <th className="px-5 py-3 text-right font-medium">Абонплата</th>
@@ -129,7 +129,7 @@ export default function OwnerBillingPage() {
                 <th className="px-5 py-3 font-medium">Действия</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-ledger-ink/10 bg-ledger-page">
               {invoices.map((inv) => {
                 const d = inv.details as {
                   subscriptionAmount?: number
@@ -137,21 +137,21 @@ export default function OwnerBillingPage() {
                   commissionPct?: number
                 }
                 return (
-                  <tr key={inv.id} className="border-b border-slate-800/60 last:border-0 hover:bg-slate-800/30">
-                    <td className="px-5 py-3 font-medium text-white">{inv.clientName}</td>
-                    <td className="px-5 py-3 text-slate-300">
+                  <tr key={inv.id} className="transition-colors hover:bg-ledger-ink/5">
+                    <td className="px-5 py-3 font-bold text-ledger-ink">{inv.clientName}</td>
+                    <td className="px-5 py-3 text-ledger-ink/60">
                       {inv.periodStart} — {inv.periodEnd}
                     </td>
-                    <td className="px-5 py-3 text-right text-slate-300">
+                    <td className="px-5 py-3 text-right text-ledger-ink/60">
                       {formatMoney(Number(d?.subscriptionAmount ?? 0))}
                     </td>
-                    <td className="px-5 py-3 text-right text-slate-300">
+                    <td className="px-5 py-3 text-right text-ledger-ink/60">
                       {formatMoney(Number(d?.commissionAmount ?? 0))}
-                      {d?.commissionPct ? <span className="text-slate-500"> · {d.commissionPct}%</span> : null}
+                      {d?.commissionPct ? <span className="text-ledger-ink/45"> · {d.commissionPct}%</span> : null}
                     </td>
-                    <td className="px-5 py-3 text-right font-semibold text-white">{formatMoney(inv.amount)}</td>
+                    <td className="px-5 py-3 text-right font-bold text-ledger-ink">{formatMoney(inv.amount)}</td>
                     <td className="px-5 py-3">
-                      <span className={`rounded-lg px-2 py-1 text-xs font-medium ${statusBadge[inv.status] ?? 'bg-slate-700/60 text-slate-300'}`}>
+                      <span className={`rounded-sm px-2 py-1 font-ledger-mono text-xs font-medium ${statusBadge[inv.status] ?? 'bg-ledger-ink/10 text-ledger-ink/60'}`}>
                         {inv.status}
                       </span>
                     </td>
@@ -161,20 +161,20 @@ export default function OwnerBillingPage() {
                           <button
                             onClick={() => act(inv.id, 'paid')}
                             disabled={busy}
-                            className="rounded-lg bg-emerald-600/20 px-2.5 py-1 text-xs font-medium text-emerald-300 hover:bg-emerald-600/30 disabled:opacity-50"
+                            className="rounded-sm bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-500/20 disabled:opacity-50"
                           >
                             Оплачен
                           </button>
                           <button
                             onClick={() => act(inv.id, 'void')}
                             disabled={busy}
-                            className="rounded-lg bg-slate-700/60 px-2.5 py-1 text-xs font-medium text-slate-300 hover:bg-slate-700 disabled:opacity-50"
+                            className="rounded-sm border border-ledger-ink/20 px-2.5 py-1 text-xs font-medium text-ledger-ink hover:bg-ledger-ink/5 disabled:opacity-50"
                           >
                             Аннулировать
                           </button>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-600">—</span>
+                        <span className="text-xs text-ledger-ink/40">—</span>
                       )}
                     </td>
                   </tr>

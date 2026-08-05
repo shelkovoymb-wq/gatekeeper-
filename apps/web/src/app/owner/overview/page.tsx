@@ -35,14 +35,14 @@ export default function OwnerOverviewPage() {
   return (
     <div>
       <header className="mb-8">
-        <h1 className="text-2xl font-bold text-white md:text-3xl">Платформа</h1>
-        <p className="mt-1 text-sm text-slate-400">
+        <h1 className="font-display text-2xl text-ledger-page md:text-3xl">Платформа</h1>
+        <p className="mt-1 text-sm text-ledger-page/60">
           Сводка по всем клиентам, обороту и комиссии платформы
         </p>
       </header>
 
       {error && (
-        <div className="mb-6 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-red-300">
+        <div className="mb-6 rounded-sm border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-red-300">
           {error}
         </div>
       )}
@@ -52,7 +52,7 @@ export default function OwnerOverviewPage() {
           {Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
-              className="h-32 animate-pulse rounded-2xl border border-slate-800 bg-slate-900/60"
+              className="h-32 animate-pulse rounded-sm bg-ledger-page/10"
             />
           ))}
         </div>
@@ -90,39 +90,39 @@ export default function OwnerOverviewPage() {
           </div>
 
           <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-3">
-            <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-br from-primary-600/15 via-slate-900/60 to-slate-900/60 p-8">
-              <p className="text-sm font-medium text-slate-300">Оборот клиентов</p>
-              <div className="mt-3 text-3xl font-bold tracking-tight text-primary-300 md:text-4xl">
+            <div className="relative overflow-hidden rounded-sm bg-ledger-page p-8 text-ledger-ink shadow-[4px_6px_0_0_rgba(0,0,0,0.25)]">
+              <p className="font-ledger-mono text-xs uppercase tracking-wide text-ledger-ink/50">Оборот клиентов</p>
+              <div className="mt-3 font-display text-3xl tracking-tight text-ledger-stamp md:text-4xl">
                 {formatMoney(data.clientsTurnover)}
               </div>
-              <p className="mt-2 text-sm text-slate-400">
+              <p className="mt-2 text-sm text-ledger-ink/55">
                 Сумма всех успешных платежей у клиентов
               </p>
             </div>
 
-            <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-br from-emerald-600/15 via-slate-900/60 to-slate-900/60 p-8">
-              <p className="text-sm font-medium text-slate-300">Комиссия платформы</p>
-              <div className="mt-3 text-3xl font-bold tracking-tight text-emerald-400 md:text-4xl">
+            <div className="relative overflow-hidden rounded-sm bg-ledger-page p-8 text-ledger-ink shadow-[4px_6px_0_0_rgba(0,0,0,0.25)]">
+              <p className="font-ledger-mono text-xs uppercase tracking-wide text-ledger-ink/50">Комиссия платформы</p>
+              <div className="mt-3 font-display text-3xl tracking-tight text-emerald-700 md:text-4xl">
                 {formatMoney(data.platformCommission)}
               </div>
-              <p className="mt-2 text-sm text-slate-400">
+              <p className="mt-2 text-sm text-ledger-ink/55">
                 Начислено с оборота по тарифам клиентов
               </p>
             </div>
 
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-8">
-              <p className="text-sm font-medium text-slate-300">Подписки клиентов (MRR)</p>
-              <div className="mt-3 text-3xl font-bold text-white">
+            <div className="rounded-sm bg-ledger-page p-8 text-ledger-ink shadow-[4px_6px_0_0_rgba(0,0,0,0.25)]">
+              <p className="font-ledger-mono text-xs uppercase tracking-wide text-ledger-ink/50">Подписки клиентов (MRR)</p>
+              <div className="mt-3 font-display text-3xl text-ledger-ink">
                 {formatMoney(data.platformMrr)}
               </div>
-              <p className="mt-2 text-sm text-slate-400">
+              <p className="mt-2 text-sm text-ledger-ink/55">
                 Ежемесячная выручка от платформенных тарифов
               </p>
             </div>
           </div>
         </>
       ) : (
-        <p className="text-slate-500">Нет данных</p>
+        <p className="text-ledger-page/45">Нет данных</p>
       )}
     </div>
   )

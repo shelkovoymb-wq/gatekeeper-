@@ -42,17 +42,17 @@ export function ChangePassword() {
   }
 
   const inputCls =
-    'w-full rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-2.5 text-sm text-white placeholder-slate-600 outline-none focus:border-primary-500'
+    'w-full rounded-sm border border-ledger-ink/15 bg-white/50 px-4 py-2.5 text-sm text-ledger-ink placeholder-ledger-ink/35 outline-none focus:border-ledger-stamp/60'
 
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-      <h2 className="mb-4 text-lg font-semibold text-white">Смена пароля</h2>
+    <section className="rounded-sm bg-ledger-page p-6 text-ledger-ink shadow-[4px_6px_0_0_rgba(0,0,0,0.25)]">
+      <h2 className="mb-4 font-display text-lg text-ledger-ink">Смена пароля</h2>
       {msg && (
         <div
-          className={`mb-4 rounded-xl px-4 py-2.5 text-sm ${
+          className={`mb-4 rounded-sm px-4 py-2.5 text-sm ${
             msg.type === 'ok'
-              ? 'border border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-              : 'border border-danger/40 bg-danger/10 text-red-300'
+              ? 'border border-success/40 bg-success/10 text-emerald-700'
+              : 'border border-danger/40 bg-danger/10 text-red-700'
           }`}
         >
           {msg.text}
@@ -86,7 +86,7 @@ export function ChangePassword() {
         <button
           type="submit"
           disabled={busy || !current || !next}
-          className="rounded-xl bg-primary-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-primary-500 disabled:opacity-50"
+          className="rounded-sm bg-ledger-stamp px-5 py-2.5 text-sm font-bold text-ledger-page hover:brightness-110 disabled:opacity-50"
         >
           {busy ? 'Сохранение…' : 'Сменить пароль'}
         </button>

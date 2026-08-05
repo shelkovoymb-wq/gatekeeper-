@@ -55,14 +55,14 @@ export default function Home() {
     <div className="min-h-screen bg-ledger-cover font-ledger-body text-ledger-page">
       {/* Навигация */}
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
-        <div className="flex items-center gap-3">
+        <Link href="/" className="flex items-center gap-3 transition hover:opacity-80">
           <svg viewBox="0 0 40 40" className="h-9 w-9 text-ledger-brass" aria-hidden="true">
             <circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" strokeWidth="2" />
             <circle cx="20" cy="16" r="5.5" fill="currentColor" />
             <path d="M20 21 L14 30 L26 30 Z" fill="currentColor" />
           </svg>
           <span className="font-display text-xl tracking-wide text-ledger-page">Gatekeeper</span>
-        </div>
+        </Link>
         <nav className="flex items-center gap-2">
           <Link
             href="/login"
