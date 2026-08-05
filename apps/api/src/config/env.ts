@@ -29,7 +29,10 @@ const schema = z.object({
   OWNER_PASSWORD: z.string().min(8).optional(),
 
   // ИИ-ассистент настройки. Если ключа нет — ассистент работает в guided-режиме.
+  // ANTHROPIC_BASE_URL позволяет направить запросы через совместимый шлюз
+  // (Anthropic Messages API), а не напрямую на api.anthropic.com.
   ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_BASE_URL: z.string().url().default('https://api.anthropic.com/v1'),
   ANTHROPIC_MODEL: z.string().default('claude-3-5-haiku-latest'),
 });
 
