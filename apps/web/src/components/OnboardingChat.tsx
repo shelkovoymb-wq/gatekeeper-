@@ -44,7 +44,7 @@ export function OnboardingChat() {
       const d = await r.json()
       const reply = d?.data?.reply || d?.error || 'Не удалось получить ответ.'
       setMessages((m) => [...m, { role: 'assistant', content: reply }])
-      if (d?.data?.token) {
+      if (d?.data?.registered) {
         setRegistered(true)
       }
     } catch {
