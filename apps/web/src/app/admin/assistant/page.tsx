@@ -145,25 +145,30 @@ export default function AssistantPage() {
         <div ref={endRef} />
       </div>
 
-      <form onSubmit={onSubmit} className="mt-4 flex items-end gap-2">
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onInput={onInput}
-          onKeyDown={onKeyDown}
-          placeholder="Напишите сообщение… (Ctrl+Enter — отправить, Shift+Enter — новая строка)"
-          rows={1}
-          className="min-w-0 flex-1 resize-none rounded-sm border border-ledger-page/15 bg-ledger-page/[0.06] px-4 py-3 text-sm text-ledger-page placeholder-ledger-page/35 outline-none focus:border-ledger-stamp/60"
-        />
-        <button
-          type="submit"
-          disabled={busy || !input.trim()}
-          className="shrink-0 rounded-sm bg-ledger-stamp px-5 py-3 text-sm font-bold text-ledger-page hover:brightness-110 disabled:opacity-50"
-        >
-          Отправить
-        </button>
-      </form>
+      <div className="mt-4">
+        <form onSubmit={onSubmit} className="flex items-end gap-2">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onInput={onInput}
+            onKeyDown={onKeyDown}
+            placeholder="Напишите сообщение…"
+            rows={1}
+            className="min-w-0 flex-1 resize-none rounded-sm border border-ledger-page/15 bg-ledger-page/[0.06] px-4 py-3 text-sm text-ledger-page placeholder-ledger-page/35 outline-none focus:border-ledger-stamp/60"
+          />
+          <button
+            type="submit"
+            disabled={busy || !input.trim()}
+            className="shrink-0 rounded-sm bg-ledger-stamp px-5 py-3 text-sm font-bold text-ledger-page hover:brightness-110 disabled:opacity-50"
+          >
+            Отправить
+          </button>
+        </form>
+        <p className="mt-1.5 font-ledger-mono text-[10px] uppercase tracking-wide text-ledger-page/35">
+          Ctrl+Enter — отправить · Shift+Enter — новая строка
+        </p>
+      </div>
     </div>
   )
 }

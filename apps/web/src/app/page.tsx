@@ -96,52 +96,33 @@ export default function Home() {
               Gatekeeper ведёт реестр за вас: бот принимает оплату, вписывает подписчика в список
               и сам вычёркивает тех, кто не продлил.
             </p>
-            <div className="mt-10 flex flex-wrap items-center gap-4">
-              <a
-                href="#assistant"
-                className="inline-flex items-center gap-2 rounded-md bg-ledger-stamp px-7 py-3.5 text-base font-bold text-ledger-page shadow-[4px_4px_0_0_rgba(0,0,0,0.3)] transition hover:-translate-y-0.5 hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ledger-brass"
-              >
-                Открыть реестр →
-              </a>
+            <p className="mt-6 inline-flex items-center gap-2 font-ledger-mono text-sm uppercase tracking-wide text-ledger-brass">
+              👉 Спросите ассистента справа — цену, как это работает, или сразу начните регистрацию
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-4">
               <Link
                 href="/register"
                 className="rounded-md border border-ledger-page/25 px-7 py-3.5 text-base font-bold text-ledger-page/90 transition hover:border-ledger-page/50 hover:bg-ledger-page/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ledger-brass"
               >
-                Обычная регистрация
+                Обычная регистрация →
               </Link>
             </div>
           </div>
 
-          {/* Билет — карточка с пробитым краем и оттиском штампа */}
-          <div className="relative mx-auto w-full max-w-sm">
-            <div className="gk-ticket-perforation rotate-[3deg] rounded-sm bg-ledger-page pb-24 pl-9 pr-6 pt-7 shadow-[10px_14px_0_0_rgba(0,0,0,0.35)] transition duration-500 hover:rotate-0">
-              <p className="font-ledger-mono text-[11px] uppercase tracking-[0.2em] text-ledger-ink/50">
-                Образец билета
-              </p>
-              <p className="mt-1 font-display text-xl text-ledger-ink">«Закрытый клуб»</p>
-
-              <div className="mt-5 space-y-2.5 border-t border-dashed border-ledger-ink/20 pt-5">
-                <div className="flex items-center justify-between font-ledger-mono text-sm text-ledger-ink">
-                  <span className="text-ledger-ink/60">Тариф</span>
-                  <span className="font-bold">Базовый · 30 дней</span>
-                </div>
-                <div className="flex items-center justify-between font-ledger-mono text-sm text-ledger-ink">
-                  <span className="text-ledger-ink/60">Цена</span>
-                  <span className="font-bold">490 ₽</span>
-                </div>
-                <div className="flex items-center justify-between font-ledger-mono text-sm text-ledger-ink">
-                  <span className="text-ledger-ink/60">Вход</span>
-                  <span className="font-bold">заявка на вступление</span>
-                </div>
-                <div className="flex items-center justify-between font-ledger-mono text-sm text-ledger-ink">
-                  <span className="text-ledger-ink/60">Автовыход</span>
-                  <span className="font-bold text-ledger-stamp">включён</span>
-                </div>
+          {/* Ассистент прямо в первом экране — окно приёма */}
+          <div className="relative mx-auto w-full max-w-md pb-10">
+            <div className="relative rounded-lg border border-ledger-brass/30 bg-ledger-cover p-3 pb-6 shadow-[0_20px_60px_rgba(0,0,0,0.4)] sm:p-4 sm:pb-7">
+              <span className="absolute left-5 top-5 h-2 w-2 rounded-full bg-ledger-brass/70" />
+              <span className="absolute right-5 top-5 h-2 w-2 rounded-full bg-ledger-brass/70" />
+              <div className="mb-3 flex justify-center">
+                <span className="rounded-sm bg-ledger-brass/90 px-4 py-1 font-ledger-mono text-[11px] uppercase tracking-[0.25em] text-ledger-cover">
+                  Окно приёма
+                </span>
               </div>
-
-              <div className="pointer-events-none absolute -bottom-4 -right-2">
-                <AdmissionStamp size={104} animate />
-              </div>
+              <OnboardingChat />
+            </div>
+            <div className="pointer-events-none absolute -bottom-2 -right-2">
+              <AdmissionStamp size={92} animate />
             </div>
           </div>
         </div>
@@ -193,30 +174,6 @@ export default function Home() {
                 <p className="mt-3 text-sm leading-relaxed text-ledger-ink/75">{c.text}</p>
               </div>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Ассистент — окно приёма */}
-      <section id="assistant" className="border-t border-ledger-page/10 bg-ledger-coverLight">
-        <div className="mx-auto max-w-3xl px-6 py-24">
-          <div className="mb-10 text-center">
-            <h2 className="font-display text-3xl text-ledger-page sm:text-4xl">Запись в реестр — в диалоге</h2>
-            <p className="mx-auto mt-3 max-w-lg text-ledger-page/65">
-              Расскажите ассистенту, что вам нужно — он зарегистрирует проект, подключит бота,
-              создаст тариф и включит оплату, пока вы переписываетесь.
-            </p>
-          </div>
-
-          <div className="relative rounded-lg border border-ledger-brass/30 bg-ledger-cover p-3 shadow-[0_20px_60px_rgba(0,0,0,0.4)] sm:p-5">
-            <span className="absolute left-5 top-5 h-2 w-2 rounded-full bg-ledger-brass/70" />
-            <span className="absolute right-5 top-5 h-2 w-2 rounded-full bg-ledger-brass/70" />
-            <div className="mb-3 flex justify-center">
-              <span className="rounded-sm bg-ledger-brass/90 px-4 py-1 font-ledger-mono text-[11px] uppercase tracking-[0.25em] text-ledger-cover">
-                Окно приёма
-              </span>
-            </div>
-            <OnboardingChat />
           </div>
         </div>
       </section>

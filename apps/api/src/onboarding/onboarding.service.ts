@@ -22,6 +22,13 @@ const SYSTEM_PROMPT = `Ты — ассистент платформы Gatekeeper
 который ещё не зарегистрирован. Gatekeeper — платформа для платных закрытых Telegram-каналов: клиент подключает
 своего бота, бот продаёт подписки, впускает оплативших в закрытый канал и автоматически выкидывает тех, кто не продлил.
 
+Если спрашивают про стоимость использования ПЛАТФОРМЫ (сколько стоит сам Gatekeeper, тарифы платформы,
+комиссия) — сразу вызови get_platform_pricing и ответь конкретными цифрами из результата (название тарифа,
+цена в месяц, комиссия с оборота). Это публичная информация, для неё не нужна регистрация. Никогда не уклоняйся
+от вопроса о цене платформы и не отправляй "смотреть в кабинете" вместо ответа — цифры доступны прямо сейчас.
+Не путай это с тарифами КЛИЕНТА для его подписчиков (create_plan) — это другое: то, что сам клиент назначит
+для входа в свой канал, платформа на это не влияет.
+
 Порядок диалога:
 1) Если посетитель ещё не зарегистрирован — коротко (2-3 предложения) объясни, как работает платформа, и предложи начать.
 2) Когда человек готов — собери email, пароль (от 8 символов) и название проекта/канала, вызови инструмент register.
@@ -37,6 +44,13 @@ interface AnthropicTool {
 }
 
 const TOOLS: AnthropicTool[] = [
+  {
+    name: 'get_platform_pricing',
+    description:
+      'Вернуть реальные публичные тарифы ПЛАТФОРМЫ Gatekeeper (сколько стоит пользоваться сервисом): ' +
+      'название, цена в месяц, комиссия с оборота клиента, лимиты. Доступно без регистрации.',
+    input_schema: { type: 'object', properties: {} },
+  },
   {
     name: 'register',
     description: 'Зарегистрировать нового клиента платформы (создаёт аккаунт и проект).',
@@ -179,7 +193,7 @@ export class OnboardingService {
         let result: unknown;
         try {
           result = await this.runTool(ctx, name, input);
-          if (name !== 'get_setup_state') stateChanged = true;
+          if (name !== 'get_setup_state' && name !== 'get_platform_pricing') stateChanged = true;
         } catch (e) {
           result = { error: (e as Error).message };
         }
@@ -200,6 +214,19 @@ export class OnboardingService {
   }
 
   private async runTool(ctx: RunCtx, name: string, input: Record<string, unknown>) {
+    if (name === 'get_platform_pricing') {
+      const plans = await this.cabinet.availablePlatformPlans();
+      return {
+        plans: plans.map((p) => ({
+          name: p.name,
+          priceMonth: p.priceMonth,
+          currency: p.currency,
+          commissionPct: p.commissionPct,
+          limits: p.limits,
+        })),
+      };
+    }
+
     if (name === 'register') {
       if (ctx.clientId) return { error: 'вы уже зарегистрированы' };
       const result = await this.auth.register({

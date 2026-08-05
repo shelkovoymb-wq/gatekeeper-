@@ -20,7 +20,9 @@ const SYSTEM_PROMPT = `Ты — ассистент настройки платф
 2) Добавить бота админом в свой канал с правами «Приглашать» и «Банить» (это клиент делает в Telegram; канал появится автоматически).
 3) Создать тариф (название, цена в рублях, период в днях) — инструмент create_plan.
 4) Подключить приём платежей (ЮKassa/CloudPayments/Robokassa/Telegram Stars) — инструмент configure_payment.
-Всегда сначала смотри текущее состояние через get_setup_state. Никогда не выдумывай токены и ключи — проси их у пользователя. Если данных не хватает — задай один короткий уточняющий вопрос.`;
+Всегда сначала смотри текущее состояние через get_setup_state. Никогда не выдумывай токены и ключи — проси их у пользователя. Если данных не хватает — задай один короткий уточняющий вопрос.
+Если спрашивают про стоимость использования платформы (тариф платформы, комиссия) — вызови get_platform_pricing
+и ответь конкретными цифрами, это не секрет. Не путай с тарифом клиента для его подписчиков (create_plan).`;
 
 interface AnthropicTool {
   name: string;
@@ -29,6 +31,13 @@ interface AnthropicTool {
 }
 
 const TOOLS: AnthropicTool[] = [
+  {
+    name: 'get_platform_pricing',
+    description:
+      'Вернуть реальные публичные тарифы ПЛАТФОРМЫ Gatekeeper (сколько стоит пользоваться сервисом): ' +
+      'название, цена в месяц, комиссия с оборота клиента, лимиты.',
+    input_schema: { type: 'object', properties: {} },
+  },
   {
     name: 'get_setup_state',
     description: 'Вернуть текущее состояние настройки: боты, каналы, тарифы, платежи.',
@@ -140,7 +149,7 @@ export class AssistantService {
         let result: unknown;
         try {
           result = await this.runTool(clientId, name, input);
-          if (name !== 'get_setup_state') stateChanged = true;
+          if (name !== 'get_setup_state' && name !== 'get_platform_pricing') stateChanged = true;
         } catch (e) {
           result = { error: (e as Error).message };
         }
@@ -157,6 +166,18 @@ export class AssistantService {
 
   private async runTool(clientId: string, name: string, input: Record<string, unknown>) {
     switch (name) {
+      case 'get_platform_pricing': {
+        const plans = await this.cabinet.availablePlatformPlans();
+        return {
+          plans: plans.map((p) => ({
+            name: p.name,
+            priceMonth: p.priceMonth,
+            currency: p.currency,
+            commissionPct: p.commissionPct,
+            limits: p.limits,
+          })),
+        };
+      }
       case 'get_setup_state':
         return this.state(clientId);
       case 'connect_bot':

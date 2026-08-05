@@ -19,6 +19,8 @@ const DRAFT_KEY = 'gk_onboarding_draft'
 const ASSISTANT_HISTORY_PREFIX = 'gk_assistant_chat_'
 const MAX_TEXTAREA_HEIGHT = 160
 
+const SUGGESTIONS = ['Сколько это стоит?', 'Как это работает?', 'Хочу зарегистрироваться']
+
 export function OnboardingChat() {
   const router = useRouter()
   const [messages, setMessages] = useState<Msg[]>([GREETING])
@@ -55,8 +57,8 @@ export function OnboardingChat() {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [messages])
 
-  const send = async () => {
-    const text = input.trim()
+  const send = async (override?: string) => {
+    const text = (override ?? input).trim()
     if (!text || busy) return
     const next = [...messages, { role: 'user' as const, content: text }]
     setMessages(next)
@@ -158,6 +160,22 @@ export function OnboardingChat() {
         <div ref={endRef} />
       </div>
 
+      {messages.length <= 1 && !registered && (
+        <div className="flex flex-wrap gap-2 px-5 pb-3">
+          {SUGGESTIONS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              disabled={busy}
+              onClick={() => void send(s)}
+              className="rounded-full border border-ledger-ink/15 bg-white/40 px-3 py-1.5 text-xs font-bold text-ledger-ink transition hover:border-ledger-stamp/50 hover:bg-white/60 disabled:opacity-50"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+
       {registered && (
         <div className="mx-5 mb-4 flex items-center justify-between gap-3 rounded-md border border-ledger-stamp/30 bg-ledger-stamp/10 px-4 py-3">
           <p className="text-sm font-bold text-ledger-stampDark">Проект зарегистрирован — продолжим в кабинете.</p>
@@ -173,30 +191,31 @@ export function OnboardingChat() {
         </div>
       )}
 
-      <form onSubmit={onSubmit} className="flex items-end gap-2 border-t border-ledger-ink/10 p-4">
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onInput={onInput}
-          onKeyDown={onKeyDown}
-          placeholder={
-            registered
-              ? 'Продолжите настройку здесь или в кабинете…'
-              : 'Напишите сообщение… (Ctrl+Enter — отправить, Shift+Enter — новая строка)'
-          }
-          disabled={busy}
-          rows={1}
-          className="flex-1 resize-none rounded-md border border-ledger-ink/15 bg-white/50 px-4 py-2.5 text-sm text-ledger-ink placeholder-ledger-ink/40 outline-none transition focus:border-ledger-stamp/60 disabled:opacity-50"
-        />
-        <button
-          type="submit"
-          disabled={busy || !input.trim()}
-          className="shrink-0 rounded-md bg-ledger-stamp px-5 py-2.5 text-sm font-bold text-ledger-page transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          →
-        </button>
-      </form>
+      <div className="border-t border-ledger-ink/10 p-4">
+        <form onSubmit={onSubmit} className="flex items-end gap-2">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onInput={onInput}
+            onKeyDown={onKeyDown}
+            placeholder={registered ? 'Продолжите настройку здесь или в кабинете…' : 'Напишите сообщение…'}
+            disabled={busy}
+            rows={1}
+            className="flex-1 resize-none rounded-md border border-ledger-ink/15 bg-white/50 px-4 py-2.5 text-sm text-ledger-ink placeholder-ledger-ink/40 outline-none transition focus:border-ledger-stamp/60 disabled:opacity-50"
+          />
+          <button
+            type="submit"
+            disabled={busy || !input.trim()}
+            className="shrink-0 rounded-md bg-ledger-stamp px-5 py-2.5 text-sm font-bold text-ledger-page transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            →
+          </button>
+        </form>
+        <p className="mt-1.5 font-ledger-mono text-[10px] uppercase tracking-wide text-ledger-ink/35">
+          Ctrl+Enter — отправить · Shift+Enter — новая строка
+        </p>
+      </div>
     </div>
   )
 }
