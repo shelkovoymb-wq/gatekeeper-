@@ -18,8 +18,8 @@ function roleFromToken(token: string): string | null {
   }
 }
 
-// Защищаем кабинет клиента (/admin/*), панель владельца (/owner/*) и корень.
-// Публично: /login, /register, /api/auth/*, статика.
+// Защищаем кабинет клиента (/admin/*) и панель владельца (/owner/*).
+// Публично: '/' (лендинг), /login, /register, /api/auth/*, статика.
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
   const token = req.cookies.get(SESSION_COOKIE)?.value
@@ -28,8 +28,7 @@ export function middleware(req: NextRequest) {
   const home = role === 'owner' ? '/owner/overview' : '/admin/stats'
 
   const isAuthPage = pathname === '/login' || pathname === '/register'
-  const isProtected =
-    pathname === '/' || pathname.startsWith('/admin') || pathname.startsWith('/owner')
+  const isProtected = pathname.startsWith('/admin') || pathname.startsWith('/owner')
 
   if (isAuthPage && hasSession) {
     return NextResponse.redirect(new URL(home, req.url))
