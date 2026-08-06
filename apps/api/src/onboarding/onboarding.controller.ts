@@ -1,4 +1,5 @@
 import { Body, Controller, Headers, Post } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { OnboardingService, type ChatMessage } from './onboarding.service.js';
 
 interface ChatDto {
@@ -10,6 +11,9 @@ interface ChatDto {
 export class OnboardingController {
   constructor(private readonly onboarding: OnboardingService) {}
 
+  // 20 сообщений/мин с одного IP — каждое дёргает платный LLM-шлюз,
+  // без лимита это открытый счётчик расходов и вектор спам-регистраций.
+  @Throttle({ default: { ttl: 60_000, limit: 20 } })
   @Post()
   chat(@Body() dto: ChatDto, @Headers('authorization') authHeader?: string) {
     const messages = Array.isArray(dto?.messages) ? dto.messages.slice(-20) : [];

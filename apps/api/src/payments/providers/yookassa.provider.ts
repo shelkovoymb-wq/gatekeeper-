@@ -5,6 +5,7 @@ import {
   type PaymentProviderAdapter,
   type PaymentRequest,
   type PaymentWebhook,
+  type WebhookVerifyContext,
 } from '../payment.types.js';
 
 @Injectable()
@@ -63,8 +64,47 @@ export class YooKassaProvider implements PaymentProviderAdapter {
     }
   }
 
-  verify(payload: unknown): PaymentWebhook {
-    const payment = (payload as { object: any }).object;
+  /**
+   * ЮKassa не подписывает вебхуки — единственный надёжный способ проверки
+   * рекомендованный самой ЮKassa: НЕ доверять статусу из тела запроса,
+   * а запросить платёж напрямую через API своими же (shopId/secretKey)
+   * учётными данными и доверять только этому ответу. Так подделать вебхук
+   * нельзя — у атакующего нет секретного ключа магазина.
+   */
+  async verify(ctx: WebhookVerifyContext): Promise<PaymentWebhook> {
+    const body = ctx.body as { object?: { id?: string; metadata?: Record<string, string> } };
+    const paymentId = body?.object?.id;
+    const clientId = body?.object?.metadata?.clientId;
+    if (!paymentId || !clientId) {
+      throw new Error('yookassa webhook: missing object.id or object.metadata.clientId');
+    }
+
+    const shopId = process.env[`YOOKASSA_SHOP_ID_${clientId.toUpperCase()}`];
+    const secretKey = process.env[`YOOKASSA_SECRET_${clientId.toUpperCase()}`];
+    if (!shopId || !secretKey) {
+      throw new Error(`YooKassa not configured for client ${clientId}`);
+    }
+
+    const auth = Buffer.from(`${shopId}:${secretKey}`).toString('base64');
+    const res = await fetch(`${this.apiUrl}/${paymentId}`, {
+      headers: { Authorization: `Basic ${auth}` },
+    });
+    if (!res.ok) {
+      throw new Error(`YooKassa confirm request failed: ${res.status}`);
+    }
+    const payment = (await res.json()) as {
+      id: string;
+      status: string;
+      amount: { value: string; currency: string };
+      created_at: string;
+      receipt_email?: string;
+      description?: string;
+      metadata?: Record<string, unknown>;
+    };
+    if (payment.id !== paymentId) {
+      throw new Error('yookassa webhook: payment id mismatch after confirmation');
+    }
+
     return {
       provider: 'yookassa',
       providerPaymentId: payment.id,
@@ -74,7 +114,7 @@ export class YooKassaProvider implements PaymentProviderAdapter {
           : payment.status === 'canceled'
             ? PaymentStatus.CANCELLED
             : PaymentStatus.FAILED,
-      amount: parseInt(payment.amount.value, 10) * 100,
+      amount: Math.round(parseFloat(payment.amount.value) * 100),
       currency: payment.amount.currency,
       timestamp: new Date(payment.created_at).getTime(),
       data: {

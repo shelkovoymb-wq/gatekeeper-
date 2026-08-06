@@ -14,7 +14,9 @@ const schema = z.object({
   // base64 от 32 байт
   SECRET_ENCRYPTION_KEY: z.string().min(1),
 
-  JWT_SECRET: z.string().min(1),
+  // 32+ символов — минимум для устойчивого HS256-секрета, чтобы слабое
+  // значение не проходило валидацию на старте (security review 2026-08-06).
+  JWT_SECRET: z.string().min(32, 'JWT_SECRET должен быть не короче 32 символов'),
   JWT_EXPIRES_IN: z.string().default('15m'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('30d'),
 

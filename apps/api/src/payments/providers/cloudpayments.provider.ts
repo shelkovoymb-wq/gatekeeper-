@@ -1,9 +1,11 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import {
   PaymentStatus,
   type PaymentProviderAdapter,
   type PaymentRequest,
   type PaymentWebhook,
+  type WebhookVerifyContext,
 } from '../payment.types.js';
 
 @Injectable()
@@ -40,9 +42,35 @@ export class CloudPaymentsProvider implements PaymentProviderAdapter {
     return { url: checkoutUrl.toString(), paymentId };
   }
 
-  verify(payload: unknown): PaymentWebhook {
-    const p = payload as Record<string, string>;
-    return {
+  /**
+   * CloudPayments подписывает каждый вебхук заголовком Content-HMAC
+   * (base64(HMAC-SHA256(сырое тело, ApiSecret магазина))). Без сверки этой
+   * подписи любой мог бы прислать поддельное "Status: 0" и получить доступ
+   * бесплатно — поэтому статус принимается только если подпись совпала.
+   */
+  verify(ctx: WebhookVerifyContext): Promise<PaymentWebhook> {
+    const p = ctx.body as Record<string, string>;
+    const clientId = p.AccountId;
+    if (!clientId) {
+      throw new Error('cloudpayments webhook: missing AccountId');
+    }
+    const apiSecret = process.env[`CLOUDPAYMENTS_API_SECRET_${clientId.toUpperCase()}`];
+    if (!apiSecret) {
+      throw new Error(`CloudPayments not configured for client ${clientId}`);
+    }
+    const headerSig = ctx.headers['content-hmac'];
+    const providedSig = Array.isArray(headerSig) ? headerSig[0] : headerSig;
+    if (!ctx.rawBody || !providedSig) {
+      throw new Error('cloudpayments webhook: missing signature or raw body');
+    }
+    const expectedSig = createHmac('sha256', apiSecret).update(ctx.rawBody).digest('base64');
+    const a = Buffer.from(providedSig);
+    const b = Buffer.from(expectedSig);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      throw new Error('cloudpayments webhook: signature mismatch');
+    }
+
+    return Promise.resolve({
       provider: 'cloudpayments',
       providerPaymentId: p.TransactionId || p.InvoiceId,
       status:
@@ -55,7 +83,7 @@ export class CloudPaymentsProvider implements PaymentProviderAdapter {
       currency: p.Currency || 'RUB',
       timestamp: Date.now(),
       data: { email: p.Email, phone: p.Phone, ip: p.IpAddress, json_data: p.JsonData },
-    };
+    });
   }
 
   async refund(paymentId: string, amount?: number): Promise<boolean> {

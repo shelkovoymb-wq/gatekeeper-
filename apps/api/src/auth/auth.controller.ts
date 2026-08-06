@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service.js';
 import { Auth, JwtAuthGuard } from './jwt-auth.guard.js';
 import type { AuthContext } from './auth.types.js';
@@ -21,11 +22,15 @@ interface ChangePasswordDto {
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
+  // 10 попыток/мин с одного IP — против скриптовой рассылки фейковых аккаунтов.
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   @Post('register')
   register(@Body() dto: RegisterDto) {
     return this.auth.register(dto);
   }
 
+  // 5 попыток/мин с одного IP — против брутфорса пароля.
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto.email, dto.password);

@@ -12,6 +12,7 @@ import {
   PaymentStatus,
   type PaymentProviderAdapter,
   type PaymentRequest,
+  type WebhookVerifyContext,
 } from './payment.types.js';
 import { TelegramStarsProvider } from './providers/telegram-stars.provider.js';
 import { YooKassaProvider } from './providers/yookassa.provider.js';
@@ -69,7 +70,7 @@ export class PaymentsService {
     return { paymentId, url, status: PaymentStatus.PENDING };
   }
 
-  async handleWebhook(providerName: string, payload: unknown) {
+  async handleWebhook(providerName: string, ctx: WebhookVerifyContext) {
     const provider = this.providers.get(providerName);
     if (!provider) {
       throw new BadRequestException(`Unknown provider: ${providerName}`);
@@ -77,7 +78,7 @@ export class PaymentsService {
 
     let webhook;
     try {
-      webhook = provider.verify(payload);
+      webhook = await provider.verify(ctx);
     } catch (error) {
       this.logger.error(
         `Webhook verification failed for ${providerName}: ${(error as Error).message}`,

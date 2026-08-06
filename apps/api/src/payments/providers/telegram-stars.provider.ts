@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import {
-  PaymentStatus,
   type PaymentProviderAdapter,
   type PaymentRequest,
   type PaymentWebhook,
+  type WebhookVerifyContext,
 } from '../payment.types.js';
 
 @Injectable()
@@ -16,23 +16,18 @@ export class TelegramStarsProvider implements PaymentProviderAdapter {
     return { url: null, paymentId };
   }
 
-  verify(payload: unknown): PaymentWebhook {
-    const { successful_payment } = payload as {
-      successful_payment: {
-        telegram_payment_charge_id: string;
-        provider_payment_charge_id: string;
-        total_amount: number;
-      };
-    };
-    return {
-      provider: 'stars',
-      providerPaymentId: successful_payment.telegram_payment_charge_id,
-      status: PaymentStatus.SUCCEEDED,
-      amount: successful_payment.total_amount,
-      currency: 'XTR',
-      timestamp: Date.now(),
-      data: { provider_payment_charge_id: successful_payment.provider_payment_charge_id },
-    };
+  /**
+   * Stars подтверждаются ИСКЛЮЧИТЕЛЬНО через апдейт successful_payment,
+   * пришедший в защищённый секретом /tg/webhook/:botId (см. TelegramController
+   * и StorefrontService.onSuccessfulPayment). Публичный общий вебхук-роут
+   * /payments/webhook/:provider не должен принимать 'stars' вовсе — иначе
+   * кто угодно мог бы прислать сюда поддельный successful_payment без
+   * какой-либо проверки со стороны Telegram. Это намеренно не реализовано.
+   */
+  verify(_ctx: WebhookVerifyContext): Promise<PaymentWebhook> {
+    throw new Error(
+      'stars payments are confirmed only via the authenticated Telegram bot update channel',
+    );
   }
 
   async refund(_paymentId: string): Promise<boolean> {

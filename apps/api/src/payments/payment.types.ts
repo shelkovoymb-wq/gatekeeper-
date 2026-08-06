@@ -35,10 +35,27 @@ export interface PaymentWebhook {
   data: Record<string, unknown>;
 }
 
+/**
+ * Контекст входящего вебхука: даём провайдеру и распарсенное тело, и сырые
+ * байты (нужны для HMAC-подписей вроде CloudPayments Content-HMAC — после
+ * JSON.parse их не восстановить), и заголовки.
+ */
+export interface WebhookVerifyContext {
+  body: unknown;
+  rawBody?: Buffer;
+  headers: Record<string, string | string[] | undefined>;
+}
+
 /** Единый интерфейс платёжного провайдера. */
 export interface PaymentProviderAdapter {
   name: string;
   initiate(request: PaymentRequest): Promise<{ url: string | null; paymentId: string }>;
-  verify(payload: unknown): PaymentWebhook;
+  /**
+   * Проверяет подлинность вебхука и ТОЛЬКО ПОСЛЕ этого возвращает статус.
+   * Реализация обязана либо криптографически проверить подпись, либо
+   * подтвердить платёж отдельным server-to-server запросом к API провайдера —
+   * никогда не доверять статусу из тела запроса напрямую.
+   */
+  verify(ctx: WebhookVerifyContext): Promise<PaymentWebhook>;
   refund(paymentId: string, amount?: number): Promise<boolean>;
 }

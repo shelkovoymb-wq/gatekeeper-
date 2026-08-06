@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common'
+import { APP_GUARD } from '@nestjs/core'
 import { ScheduleModule } from '@nestjs/schedule'
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler'
 import { ConfigModule } from './config/config.module.js'
 import { DbModule } from './db/db.module.js'
 import { CryptoModule } from './common/crypto.module.js'
@@ -35,6 +37,9 @@ import { OnboardingModule } from './onboarding/onboarding.module.js'
 @Module({
   imports: [
     ScheduleModule.forRoot(),
+    // Глобальный дефолт от простого DoS/скана; конкретным маршрутам
+    // (логин, публичный онбординг) выставлены более строгие @Throttle ниже.
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 60 }]),
     ConfigModule,
     DbModule,
     CryptoModule,
@@ -58,6 +63,7 @@ import { OnboardingModule } from './onboarding/onboarding.module.js'
     OnboardingModule,
     TelegramModule
   ],
-  controllers: [AppController, HealthController]
+  controllers: [AppController, HealthController],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }]
 })
 export class AppModule {}

@@ -1,10 +1,11 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
-import crypto from 'node:crypto';
+import crypto, { timingSafeEqual } from 'node:crypto';
 import {
   PaymentStatus,
   type PaymentProviderAdapter,
   type PaymentRequest,
   type PaymentWebhook,
+  type WebhookVerifyContext,
 } from '../payment.types.js';
 
 @Injectable()
@@ -26,7 +27,11 @@ export class RobokassaProvider implements PaymentProviderAdapter {
 
     const invoiceId = `inv_${Date.now()}`;
     const sum = (request.amount / 100).toFixed(2);
-    const signature = this.md5(`${merchantLogin}:${sum}:${invoiceId}:${password1}`);
+    // Shp_-параметры Робокасса возвращает без изменений в уведомлении на ResultURL —
+    // это единственный способ узнать clientId при проверке подписи вебхука,
+    // поэтому он обязательно участвует в подписи запроса на оплату.
+    const shpClientId = `Shp_clientId=${request.clientId}`;
+    const signature = this.md5(`${merchantLogin}:${sum}:${invoiceId}:${password1}:${shpClientId}`);
     const email = (request.metadata?.email as string) ?? '';
 
     const params = new URLSearchParams({
@@ -38,25 +43,47 @@ export class RobokassaProvider implements PaymentProviderAdapter {
       Email: email,
       Encoding: 'utf-8',
       Culture: 'ru',
+      Shp_clientId: request.clientId,
     });
 
     return { url: `${this.checkoutUrl}?${params.toString()}`, paymentId: invoiceId };
   }
 
-  verify(payload: unknown): PaymentWebhook {
-    const p = payload as Record<string, string>;
-    return {
+  /**
+   * Робокасса подписывает уведомление на ResultURL отдельным паролем
+   * (Password #2, НЕ тем же, что используется для инициации оплаты) —
+   * SignatureValue = MD5(OutSum:InvId:Password2:Shp_clientId=...).
+   * Без сверки подписи любой мог прислать поддельное подтверждение оплаты.
+   */
+  verify(ctx: WebhookVerifyContext): Promise<PaymentWebhook> {
+    const p = ctx.body as Record<string, string>;
+    const clientId = p.Shp_clientId;
+    if (!clientId) {
+      throw new Error('robokassa webhook: missing Shp_clientId');
+    }
+    const password2 = process.env[`ROBOKASSA_PASSWORD2_${clientId.toUpperCase()}`];
+    if (!password2) {
+      throw new Error(`Robokassa result password not configured for client ${clientId}`);
+    }
+    const expected = this.md5(
+      `${p.OutSum}:${p.InvId}:${password2}:Shp_clientId=${clientId}`,
+    ).toUpperCase();
+    const provided = (p.SignatureValue || '').toUpperCase();
+    const a = Buffer.from(provided);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      throw new Error('robokassa webhook: signature mismatch');
+    }
+
+    return Promise.resolve({
       provider: 'robokassa',
-      providerPaymentId: p.OperationId || p.InvoiceID,
-      status:
-        p.Status === 'received' || p.Status === 'confirmed'
-          ? PaymentStatus.SUCCEEDED
-          : PaymentStatus.FAILED,
-      amount: Math.round(parseFloat(p.Sum) * 100),
+      providerPaymentId: p.InvId,
+      status: PaymentStatus.SUCCEEDED,
+      amount: Math.round(parseFloat(p.OutSum) * 100),
       currency: 'RUB',
       timestamp: Date.now(),
-      data: { invoice_id: p.InvoiceID, operation_id: p.OperationId, status: p.Status },
-    };
+      data: { invoice_id: p.InvId, client_id: clientId },
+    });
   }
 
   async refund(paymentId: string, _amount?: number): Promise<boolean> {

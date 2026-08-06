@@ -5,12 +5,19 @@ import {
   Body,
   Param,
   Query,
+  Req,
   BadRequestException,
   UseGuards,
 } from '@nestjs/common';
 import { ServiceTokenGuard } from '../common/service-token.guard.js';
 import { PaymentsService } from './payments.service.js';
 import type { PaymentRequest } from './payment.types.js';
+
+/** Nest с { rawBody: true } кладёт сырой Buffer тела прямо на request. */
+interface RawBodyReq {
+  rawBody?: Buffer;
+  headers: Record<string, string | string[] | undefined>;
+}
 
 @Controller('payments')
 export class PaymentsController {
@@ -25,10 +32,20 @@ export class PaymentsController {
     return this.paymentService.initiatePayment(request);
   }
 
-  // Публичный эндпоинт для вебхуков платёжных провайдеров (без Bearer).
+  // Публичный эндпоинт для вебхуков платёжных провайдеров (без Bearer) —
+  // подлинность проверяется внутри каждого провайдера (подпись/сверка с API),
+  // см. payment.types.ts WebhookVerifyContext.
   @Post('webhook/:provider')
-  async handleWebhook(@Param('provider') provider: string, @Body() payload: unknown) {
-    return this.paymentService.handleWebhook(provider, payload);
+  async handleWebhook(
+    @Param('provider') provider: string,
+    @Body() payload: unknown,
+    @Req() req: RawBodyReq,
+  ) {
+    return this.paymentService.handleWebhook(provider, {
+      body: payload,
+      rawBody: req.rawBody,
+      headers: req.headers,
+    });
   }
 
   @Get(':paymentId')

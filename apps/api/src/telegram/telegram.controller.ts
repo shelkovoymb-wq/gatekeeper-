@@ -9,9 +9,16 @@ import {
   NotFoundException,
   Logger,
 } from '@nestjs/common';
+import { timingSafeEqual } from 'node:crypto';
 import type { Update } from 'grammy/types';
 import { BotRegistry } from './bot-registry.js';
 import { TelegramUpdateHandler } from './update-handler.js';
+
+function safeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  return bufA.length === bufB.length && timingSafeEqual(bufA, bufB);
+}
 
 /**
  * Единая точка входа для webhook'ов всех ботов: /tg/webhook/:botId.
@@ -36,7 +43,7 @@ export class TelegramController {
   ) {
     const entry = await this.registry.get(botId);
     if (!entry) throw new NotFoundException('unknown bot');
-    if (!secret || secret !== entry.secret) {
+    if (!secret || !safeEqual(secret, entry.secret)) {
       throw new ForbiddenException('bad webhook secret');
     }
 
