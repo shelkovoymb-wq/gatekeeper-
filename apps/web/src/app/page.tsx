@@ -3,10 +3,47 @@ import type { Metadata } from 'next'
 import { OnboardingChat } from '@/components/OnboardingChat'
 import { AdmissionStamp } from '@/components/AdmissionStamp'
 
+const TITLE = 'Gatekeeper — бот для платных подписок на Telegram-канал'
+const DESCRIPTION =
+  'Бот сам продаёт подписку на закрытый Telegram-канал: принимает оплату, впускает подписчика и убирает тех, кто не продлил. Без ручной работы и кода.'
+
 export const metadata: Metadata = {
-  title: 'Gatekeeper — доступ к вашему закрытому каналу по подписке',
-  description:
-    'Gatekeeper сам следит за подписками в вашем платном Telegram-канале: бот принимает оплату, впускает подписчика и убирает тех, кто не продлил.',
+  title: TITLE,
+  description: DESCRIPTION,
+  keywords: [
+    'платная подписка Telegram',
+    'закрытый Telegram канал',
+    'бот для подписки на канал',
+    'монетизация Telegram канала',
+    'продажа доступа в Telegram',
+  ],
+  alternates: { canonical: '/' },
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    url: '/',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+}
+
+const STRUCTURED_DATA = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Gatekeeper',
+  applicationCategory: 'BusinessApplication',
+  operatingSystem: 'Web',
+  description: DESCRIPTION,
+  url: 'https://gatekeeper.skud24.ru',
+  offers: [
+    { '@type': 'Offer', name: 'Free', price: '0', priceCurrency: 'RUB' },
+    { '@type': 'Offer', name: 'Start', price: '990', priceCurrency: 'RUB' },
+    { '@type': 'Offer', name: 'Pro', price: '2900', priceCurrency: 'RUB' },
+  ],
 }
 
 const LEDGER_ROWS = [
@@ -53,6 +90,11 @@ const INDEX_CARDS = [
 export default function Home() {
   return (
     <div className="min-h-screen bg-ledger-cover font-ledger-body text-ledger-page">
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA) }}
+      />
       {/* Навигация */}
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
         <Link href="/" className="flex items-center gap-3 transition hover:opacity-80">
@@ -93,8 +135,8 @@ export default function Home() {
               <span className="text-ledger-stamp">Вход — по подписке.</span>
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-relaxed text-ledger-page/75">
-              Gatekeeper сам следит за подписчиками: бот принимает оплату, впускает нового человека
-              в канал и сам убирает тех, кто не продлил.
+              Оплатил — сразу внутри. Не продлил — бот сам закроет доступ. Круглосуточно,
+              без вашего участия и без ручных проверок «кто там ещё не заплатил».
             </p>
             <p className="mt-6 inline-flex items-center gap-2 font-ledger-mono text-sm uppercase tracking-wide text-ledger-brass">
               👉 Спросите ассистента справа — цену, как это работает, или сразу начните регистрацию

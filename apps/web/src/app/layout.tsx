@@ -2,9 +2,24 @@ import type { Metadata } from 'next'
 import { Yeseva_One, PT_Sans, PT_Mono } from 'next/font/google'
 import './globals.css'
 
+const SITE_URL = 'https://gatekeeper.skud24.ru'
+
 export const metadata: Metadata = {
-  title: 'Gatekeeper — Кабинет',
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: 'Gatekeeper — Кабинет',
+    template: '%s · Gatekeeper',
+  },
   description: 'Платные Telegram-каналы: кабинет клиента и панель владельца платформы',
+  openGraph: {
+    siteName: 'Gatekeeper',
+    locale: 'ru_RU',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+  },
+  robots: { index: true, follow: true },
 }
 
 // Шрифты лендинга (реестр/тикет-эстетика) — подключены здесь как CSS-переменные,
