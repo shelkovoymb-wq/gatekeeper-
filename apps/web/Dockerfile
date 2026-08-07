@@ -18,6 +18,13 @@ RUN pnpm install --frozen-lockfile || pnpm install
 
 # Build Next.js app
 WORKDIR /app/apps/web
+# next build статически «запекает» metadata (в т.ч. коды подтверждения сайта
+# для Google/Яндекс) в prerendered HTML — их нужно передать ДО сборки, а не
+# только в рантайм-окружение контейнера.
+ARG GOOGLE_SITE_VERIFICATION=""
+ARG YANDEX_VERIFICATION=""
+ENV GOOGLE_SITE_VERIFICATION=$GOOGLE_SITE_VERIFICATION
+ENV YANDEX_VERIFICATION=$YANDEX_VERIFICATION
 RUN mkdir -p public && pnpm build
 
 # Runtime stage — переиспользуем node_modules из builder (без второй установки)

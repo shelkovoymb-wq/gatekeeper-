@@ -65,6 +65,11 @@ services:
     build:
       context: ../..
       dockerfile: apps/web/Dockerfile
+      args:
+        # next build запекает эти коды в статический HTML на этапе сборки —
+        # runtime environment (ниже) для них уже не сработает, см. Dockerfile.
+        GOOGLE_SITE_VERIFICATION: ${GOOGLE_SITE_VERIFICATION:-}
+        YANDEX_VERIFICATION: ${YANDEX_VERIFICATION:-}
     restart: unless-stopped
     environment:
       NODE_ENV: production
