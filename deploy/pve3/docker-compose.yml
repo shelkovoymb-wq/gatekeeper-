@@ -70,6 +70,10 @@ services:
       NODE_ENV: production
       BACKEND_URL: http://api:3000
       GATEKEEPER_API_TOKEN: ${N8N_SERVICE_TOKEN}
+      # Коды подтверждения сайта для Google Search Console / Яндекс.Вебмастера —
+      # задаются в deploy/pve3/.env, не секретны (просто рендерятся в <meta>).
+      GOOGLE_SITE_VERIFICATION: ${GOOGLE_SITE_VERIFICATION:-}
+      YANDEX_VERIFICATION: ${YANDEX_VERIFICATION:-}
     depends_on:
       - api
     # Публикуем web на 3001 — gatekeeper-proxy на .44 отдаёт сюда всё, кроме api-путей.

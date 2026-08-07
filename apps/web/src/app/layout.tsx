@@ -20,6 +20,13 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
   },
   robots: { index: true, follow: true },
+  // Коды подтверждения владения сайтом для Google Search Console и
+  // Яндекс.Вебмастера — сами по себе не секретны (это просто <meta>-теги),
+  // но берутся из env, чтобы не редеплоить код при получении/смене кода.
+  verification: {
+    google: process.env.GOOGLE_SITE_VERIFICATION || undefined,
+    yandex: process.env.YANDEX_VERIFICATION || undefined,
+  },
 }
 
 // Шрифты лендинга (реестр/тикет-эстетика) — подключены здесь как CSS-переменные,
