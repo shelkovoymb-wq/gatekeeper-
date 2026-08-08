@@ -5,6 +5,7 @@ import { TelegramStarsProvider } from './providers/telegram-stars.provider.js';
 import { YooKassaProvider } from './providers/yookassa.provider.js';
 import { CloudPaymentsProvider } from './providers/cloudpayments.provider.js';
 import { RobokassaProvider } from './providers/robokassa.provider.js';
+import { ProdamusProvider } from './providers/prodamus.provider.js';
 
 @Module({
   controllers: [PaymentsController],
@@ -14,6 +15,7 @@ import { RobokassaProvider } from './providers/robokassa.provider.js';
     YooKassaProvider,
     CloudPaymentsProvider,
     RobokassaProvider,
+    ProdamusProvider,
   ],
   exports: [PaymentsService],
 })
