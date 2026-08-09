@@ -5,6 +5,7 @@ export enum PaymentProvider {
   ROBOKASSA = 'robokassa',
   CRYPTOBOT = 'cryptobot',
   PRODAMUS = 'prodamus',
+  DIRECT = 'direct',
 }
 
 export enum PaymentStatus {
