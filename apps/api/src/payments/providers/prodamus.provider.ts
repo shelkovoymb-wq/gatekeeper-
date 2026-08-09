@@ -123,7 +123,7 @@ export class ProdamusProvider implements PaymentProviderAdapter {
 
     return {
       provider: 'prodamus',
-      providerPaymentId: paymentId || orderId,
+      providerPaymentId: (paymentId || orderId) as string,
       status,
       amount: Math.round((body.amount as number) * 100),
       currency: (body.currency as string) || 'RUB',

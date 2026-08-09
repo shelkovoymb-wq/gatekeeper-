@@ -105,7 +105,7 @@ export class DirectTransferProvider implements PaymentProviderAdapter {
       throw new Error('direct transfer webhook: missing payment_id or order_id');
     }
 
-    const id = paymentId || orderId;
+    const id = (paymentId || orderId) as string;
     const status = (body.status as string | undefined)?.toLowerCase();
 
     const statusMap: Record<string, PaymentStatus> = {
