@@ -18,6 +18,8 @@ import { TelegramStarsProvider } from './providers/telegram-stars.provider.js';
 import { YooKassaProvider } from './providers/yookassa.provider.js';
 import { CloudPaymentsProvider } from './providers/cloudpayments.provider.js';
 import { RobokassaProvider } from './providers/robokassa.provider.js';
+import { ProdamusProvider } from './providers/prodamus.provider.js';
+import { DirectTransferProvider } from './providers/direct-transfer.provider.js';
 
 @Injectable()
 export class PaymentsService {
@@ -30,12 +32,16 @@ export class PaymentsService {
     yookassaProvider: YooKassaProvider,
     cloudpaymentsProvider: CloudPaymentsProvider,
     robokassaProvider: RobokassaProvider,
+    prodamusProvider: ProdamusProvider,
+    directTransferProvider: DirectTransferProvider,
   ) {
     this.providers = new Map<string, PaymentProviderAdapter>([
       ['stars', starsProvider],
       ['yookassa', yookassaProvider],
       ['cloudpayments', cloudpaymentsProvider],
       ['robokassa', robokassaProvider],
+      ['prodamus', prodamusProvider],
+      ['direct', directTransferProvider],
     ]);
     this.logger.log(
       `Payment providers initialized: ${Array.from(this.providers.keys()).join(', ')}`,

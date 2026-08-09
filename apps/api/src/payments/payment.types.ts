@@ -4,6 +4,8 @@ export enum PaymentProvider {
   CLOUDPAYMENTS = 'cloudpayments',
   ROBOKASSA = 'robokassa',
   CRYPTOBOT = 'cryptobot',
+  PRODAMUS = 'prodamus',
+  DIRECT = 'direct',
 }
 
 export enum PaymentStatus {

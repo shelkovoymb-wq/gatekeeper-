@@ -213,6 +213,35 @@ export const paymentConfigs = pgTable(
   }),
 );
 
+export const directPaymentAccounts = pgTable(
+  'direct_payment_accounts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id),
+    accountType: text('account_type').notNull(), // card|bank_account|sbp|paypal
+    cardNumberMasked: text('card_number_masked'), // **** **** **** 1234
+    cardHolder: text('card_holder'),
+    bankName: text('bank_name'),
+    accountNumber: text('account_number'),
+    bic: text('bic'),
+    inn: text('inn'),
+    phoneNumber: text('phone_number'),
+    email: text('email'),
+    phoneForSbp: text('phone_for_sbp'),
+    isActive: boolean('is_active').notNull().default(true),
+    verificationStatus: text('verification_status').notNull().default('unverified'), // unverified|pending|verified|rejected
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    createdAt: nowDefault(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    byClient: index('direct_payment_accounts_client_idx').on(t.clientId),
+    byStatus: index('direct_payment_accounts_status_idx').on(t.verificationStatus),
+  }),
+);
+
 // ─── ПОДПИСЧИКИ И ПОДПИСКИ ────────────────────────────────────────────────────
 
 export const subscribers = pgTable('subscribers', {
