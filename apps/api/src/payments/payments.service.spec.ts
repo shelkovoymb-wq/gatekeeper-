@@ -1,138 +1,149 @@
-import { Test, TestingModule } from '@nestjs/testing'
-import { BadRequestException, NotFoundException } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
-import { PaymentsService } from './payments.service'
-import { TelegramStarsProvider } from './providers/telegram-stars.provider'
-import { YooKassaProvider } from './providers/yookassa.provider'
-import { CloudPaymentsProvider } from './providers/cloudpayments.provider'
-import { RobokassaProvider } from './providers/robokassa.provider'
-import { PaymentStatus } from './payment.types'
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { PaymentsService } from './payments.service.js';
+import { PaymentStatus } from './payment.types.js';
+import { createFakeDb, type FakeDb } from '../owner/fake-db.js';
+
+/** Заглушка адаптера провайдера — ровно тот контракт, который зовёт сервис. */
+function stubProvider(paymentId: string, url: string | null) {
+  return {
+    initiate: vi.fn().mockResolvedValue({ url, paymentId }),
+    verify: vi.fn(),
+    refund: vi.fn().mockResolvedValue(true),
+  };
+}
 
 describe('PaymentsService', () => {
-  let service: PaymentsService
-  let configService: ConfigService
+  let service: PaymentsService;
+  let fake: FakeDb;
+  let yookassa: ReturnType<typeof stubProvider>;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        PaymentsService,
-        {
-          provide: ConfigService,
-          useValue: { get: jest.fn() }
-        },
-        {
-          provide: TelegramStarsProvider,
-          useValue: {
-            initiate: jest.fn().mockResolvedValue({ url: null, paymentId: 'stars_123' }),
-            verify: jest.fn(),
-            refund: jest.fn().mockResolvedValue(true)
-          }
-        },
-        {
-          provide: YooKassaProvider,
-          useValue: {
-            initiate: jest.fn().mockResolvedValue({ url: 'https://yookassa.ru/checkout', paymentId: 'yk_123' }),
-            verify: jest.fn(),
-            refund: jest.fn().mockResolvedValue(true)
-          }
-        },
-        {
-          provide: CloudPaymentsProvider,
-          useValue: {
-            initiate: jest.fn().mockResolvedValue({ url: 'https://cloudpayments.ru', paymentId: 'cp_123' }),
-            verify: jest.fn(),
-            refund: jest.fn().mockResolvedValue(true)
-          }
-        },
-        {
-          provide: RobokassaProvider,
-          useValue: {
-            initiate: jest.fn().mockResolvedValue({ url: 'https://robokassa.ru', paymentId: 'rb_123' }),
-            verify: jest.fn(),
-            refund: jest.fn().mockResolvedValue(false)
-          }
-        }
-      ]
-    }).compile()
+  beforeEach(() => {
+    const created = createFakeDb();
+    fake = created.fake;
+    yookassa = stubProvider('yk_123', 'https://yookassa.ru/checkout');
 
-    service = module.get<PaymentsService>(PaymentsService)
-    configService = module.get<ConfigService>(ConfigService)
-  })
+    service = new PaymentsService(
+      created.db,
+      stubProvider('stars_123', null) as never,
+      yookassa as never,
+      stubProvider('cp_123', 'https://cloudpayments.ru') as never,
+      stubProvider('rb_123', 'https://robokassa.ru') as never,
+      stubProvider('pd_123', 'https://prodamus.ru') as never,
+      stubProvider('dt_123', null) as never,
+    );
+  });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined()
-  })
+  const request = {
+    clientId: 'client_1',
+    subscriberId: 'sub_1',
+    subscriptionId: 'subc_1',
+    amount: 99900,
+    currency: 'RUB',
+    provider: 'yookassa',
+    description: 'Тестовый платёж',
+  };
 
   describe('initiatePayment', () => {
-    it('should create payment with valid request', async () => {
-      const request = {
-        clientId: 'client_1',
-        subscriberId: 'sub_1',
-        subscriptionId: 'subc_1',
-        amount: 99900,
-        currency: 'RUB',
+    it('зовёт адаптер выбранного провайдера и возвращает ссылку на оплату', async () => {
+      fake.queue([]);
+
+      const result = await service.initiatePayment(request);
+
+      expect(yookassa.initiate).toHaveBeenCalledWith(request);
+      expect(result).toEqual({
+        paymentId: 'yk_123',
+        url: 'https://yookassa.ru/checkout',
+        status: PaymentStatus.PENDING,
+      });
+    });
+
+    it('сохраняет платёж как pending с суммой строкой (numeric-колонка)', async () => {
+      fake.queue([]);
+
+      await service.initiatePayment(request);
+
+      const [values] = fake.argsOf('values') as [Record<string, unknown>];
+      expect(values.status).toBe(PaymentStatus.PENDING);
+      expect(values.amount).toBe('99900');
+      expect(values.provider).toBe('yookassa');
+      expect(values.providerPaymentId).toBe('yk_123');
+    });
+
+    it.each(['stars', 'yookassa', 'cloudpayments', 'robokassa', 'prodamus', 'direct'])(
+      'поддерживает провайдера %s',
+      async (provider) => {
+        fake.queue([]);
+        await expect(
+          service.initiatePayment({ ...request, provider }),
+        ).resolves.toMatchObject({ status: PaymentStatus.PENDING });
+      },
+    );
+
+    it('отвергает незарегистрированного провайдера', async () => {
+      await expect(
+        service.initiatePayment({ ...request, provider: 'invalid_provider' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('не пишет в базу, если провайдер не найден', async () => {
+      await expect(
+        service.initiatePayment({ ...request, provider: 'invalid_provider' }),
+      ).rejects.toThrow();
+
+      expect(fake.calls.some((c) => c.method === 'insert')).toBe(false);
+    });
+  });
+
+  describe('handleWebhook', () => {
+    it('отвергает вебхук от неизвестного провайдера', async () => {
+      await expect(
+        service.handleWebhook('invalid_provider', { body: {}, headers: {} } as never),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('превращает провал проверки подписи в 400, не пропуская платёж дальше', async () => {
+      yookassa.verify.mockRejectedValue(new Error('bad signature'));
+
+      await expect(
+        service.handleWebhook('yookassa', { body: {}, headers: {} } as never),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(fake.calls.some((c) => c.method === 'update')).toBe(false);
+    });
+
+    it('бросает NotFound, если платежа из вебхука нет в базе', async () => {
+      yookassa.verify.mockResolvedValue({
         provider: 'yookassa',
-        description: 'Test payment'
-      }
+        providerPaymentId: 'yk_404',
+        status: PaymentStatus.SUCCEEDED,
+        data: {},
+      });
+      fake.queue([]);
 
-      // Note: real test would need DB mock
-      // This is a structure test
-      expect(request.amount).toBeGreaterThan(0)
-      expect(request.provider).toMatch(/yookassa|cloudpayments|robokassa|stars/)
-    })
+      await expect(
+        service.handleWebhook('yookassa', { body: {}, headers: {} } as never),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
 
-    it('should throw on unsupported provider', async () => {
-      const request = {
-        clientId: 'client_1',
-        subscriberId: 'sub_1',
-        subscriptionId: 'subc_1',
-        amount: 99900,
-        currency: 'RUB',
-        provider: 'invalid_provider',
-        description: 'Test payment'
-      }
+    it('проставляет платежу статус из проверенного вебхука', async () => {
+      yookassa.verify.mockResolvedValue({
+        provider: 'yookassa',
+        providerPaymentId: 'yk_123',
+        status: PaymentStatus.SUCCEEDED,
+        data: { foo: 'bar' },
+      });
+      fake.queue([{ id: 'pay_1' }], []);
 
-      // Providers check
-      const supportedProviders = ['yookassa', 'cloudpayments', 'robokassa', 'stars']
-      expect(supportedProviders).not.toContain(request.provider)
-    })
+      const result = await service.handleWebhook('yookassa', {
+        body: {},
+        headers: {},
+      } as never);
 
-    it('should throw on missing required fields', () => {
-      const invalidRequests = [
-        { clientId: '', subscriberId: 'sub_1', subscriptionId: 'subc_1', amount: 100, provider: 'yookassa' },
-        { clientId: 'c1', subscriberId: 'sub_1', subscriptionId: 'subc_1', amount: 0, provider: 'yookassa' },
-        { clientId: 'c1', subscriberId: 'sub_1', subscriptionId: 'subc_1', amount: 100, provider: '' }
-      ]
-
-      invalidRequests.forEach(req => {
-        const { clientId, amount, provider } = req
-        expect(!clientId || amount <= 0 || !provider).toBe(true)
-      })
-    })
-  })
-
-  describe('getPayment', () => {
-    it('should return payment if found', () => {
-      const paymentId = 'pay_123'
-      expect(paymentId).toBeDefined()
-      expect(paymentId.length).toBeGreaterThan(0)
-    })
-
-    it('should throw NotFoundException if not found', () => {
-      const invalidId = ''
-      expect(invalidId.length === 0).toBe(true)
-    })
-  })
-
-  describe('refundPayment', () => {
-    it('should refund succeeded payment', () => {
-      const status = PaymentStatus.SUCCEEDED
-      expect(status).toBe('succeeded')
-    })
-
-    it('should reject refund for non-succeeded payment', () => {
-      const statuses = [PaymentStatus.PENDING, PaymentStatus.FAILED, PaymentStatus.CANCELLED]
-      expect(statuses).not.toContain(PaymentStatus.SUCCEEDED)
-    })
-  })
-})
+      expect(result).toMatchObject({ id: 'pay_1', status: PaymentStatus.SUCCEEDED });
+      const [patch] = fake.argsOf('set') as [Record<string, unknown>];
+      expect(patch.status).toBe(PaymentStatus.SUCCEEDED);
+      expect(patch.metadata).toEqual({ foo: 'bar' });
+    });
+  });
+});

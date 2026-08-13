@@ -1,480 +1,227 @@
-# Owner Payment Accounts & Payouts Guide
+# Реквизиты владельца и выплаты
 
-Система управления платежными реквизитами и выплатами для владельца платформы.
+Куда платформа перечисляет заработанное и как это учитывается.
 
-## Обзор
+## Что это
 
 Владелец платформы получает доход из двух источников:
-1. **Абонентская плата** — месячный платеж за использование тарифа
-2. **Комиссия от оборота** — процент от платежей клиентов
 
-Система автоматически:
-- Генерирует счета клиентам (1-го числа в 03:00 UTC)
-- Позволяет владельцу регистрировать платежные счета
-- Создавать и отслеживать выплаты
+1. **Абонентская плата** — месячный платёж клиента за тариф
+2. **Комиссия с оборота** — процент от платежей подписчиков
 
-## Архитектура
+Счета клиентам генерируются отдельно (см. `docs/PAYMENTS_GUIDE.md`). Этот модуль
+отвечает за вторую половину: **на какие реквизиты владельца уходят деньги** и
+**какие выплаты уже прошли**.
 
-### Платежные счета владельца (owner_payment_accounts)
+## Где смотреть в интерфейсе
 
-Поддерживаемые типы счетов:
+Кабинет владельца → **«Реквизиты и выплаты»** (`/owner/payouts`).
 
-| Тип | Реквизиты | PCI Compliant |
-|-----|-----------|---------------|
-| `bank_account` | BIC, INN, SWIFT, №счета | ✓ |
-| `card` | Только последние 4 цифры | ✓ |
-| `sbp` | Номер телефона | ✓ |
-| `paypal` | Email | ✓ |
-| `crypto` | Адрес кошелька | ✓ |
+На странице: плитки статистики, форма добавления реквизитов, список реквизитов
+с кнопками «Подтвердить»/«Отключить» и история выплат.
 
-### Состояния счета
+## Как устроен доступ
+
+Это важно понимать, прежде чем дёргать эндпоинты curl-ом.
 
 ```
-unverified → pending → verified
-                  ↓
-               rejected
+браузер ──► Next.js /api/platform/*  (BFF, тот же домен)
+                    │  внутренняя docker-сеть, JWT из httpOnly-куки
+                    ▼
+            NestJS /v1/platform/*     (наружу НЕ проброшен)
 ```
 
-- **unverified**: Новый счет, требует верификации
-- **pending**: На рассмотрении
-- **verified**: Проверен и активен
-- **rejected**: Отклонен (не может быть использован)
+nginx на traefik-ha пробрасывает в API **только** `/healthz`, `/tg/` и
+`/payments/webhook/` — всё остальное уходит в Next.js
+(см. `deploy/pve3/gatekeeper-proxy/nginx.conf`). Это сделано намеренно: владельческие
+эндпоинты не должны торчать в интернет. Поэтому:
 
-### Выплаты (owner_payouts)
+- ❌ `https://gatekeeper.skud24.ru/v1/platform/payment-accounts` — вернёт 404 от Next.js
+- ✅ `https://gatekeeper.skud24.ru/api/platform/payment-accounts` — BFF-роут, работает из браузера с сессионной кукой
 
-Статусы выплаты:
+Контроллер живёт под префиксом `v1/platform` — как `PlatformController`, а не под
+собственным `/owner`, который был бы недостижим из браузера.
+
+## Типы реквизитов
+
+| Тип | Поля | Что хранится |
+|-----|------|--------------|
+| `bank_account` | `bankName`, `accountNumber`, `bic`, `inn` | номер отдаётся маскированным |
+| `card` | `cardLast4`, `cardHolder` | только последние 4 цифры, полного номера нет |
+| `sbp` | `phoneSbp` | телефон |
+| `paypal` | `paypalEmail` | email |
+| `crypto` | `cryptoAddress`, `cryptoType` (`btc`/`eth`/`usdt`) | адрес кошелька |
+
+Любой другой `accountType` отвергается с 400.
+
+## Состояния
+
+**Реквизиты** (`verification_status`), стартуют с `pending`:
 
 ```
-pending → processing → completed
-    ↓                       ↑
-  failed ←─────────────────┘
-    ↓
-cancelled
+pending ──► verified   (можно платить)
+   └─────► rejected    (нельзя)
 ```
 
-- **pending**: Создана, ожидает отправки
-- **processing**: Отправляется на счет
-- **completed**: Успешно зачислена
-- **failed**: Ошибка при отправке
-- **cancelled**: Отменена вручную
+Отдельный флаг `is_active`: «Отключить» ставит его в `false` — запись сохраняется
+для истории, но выплату на неё создать нельзя.
+
+**Выплаты** (`status`):
+
+```
+pending ──► processing ──► completed
+   └────────────┴────────► failed
+```
+
+`completed_at` проставляется при переходе в `completed` или `failed`. Каждый переход
+пишется в `owner_payout_events`.
 
 ## API
 
-### Управление платежными счетами
+Пути ниже — как их видит браузер (BFF). Внутренний путь получается заменой
+`/api/platform` на `/v1/platform`.
 
-#### Добавить счет
+### Реквизиты
 
-```bash
-POST /owner/payment-accounts
-
-# Bank Account
-{
-  "accountType": "bank_account",
-  "bankName": "Sberbank",
-  "accountNumber": "40817810638050123456",
-  "bic": "044525225",
-  "inn": "7707083893",
-  "sortCode": "123-456",  # опционально
-  "swiftCode": "SABRRUMMSC"  # опционально
-}
-
-# Card
-{
-  "accountType": "card",
-  "cardLast4": "4242",
-  "cardHolder": "Ivan Petrov"
-}
-
-# SBP (Russian Instant Payments)
-{
-  "accountType": "sbp",
-  "phoneSbp": "+79991234567"
-}
-
-# PayPal
-{
-  "accountType": "paypal",
-  "paypalEmail": "owner@example.com"
-}
-
-# Crypto
-{
-  "accountType": "crypto",
-  "cryptoAddress": "1A1z7agoat4xFG8hE7Ezuw9wVoPz6ecyAD",
-  "cryptoType": "btc"  # btc | eth | usdt
-}
+```http
+GET    /api/platform/payment-accounts        # список
+POST   /api/platform/payment-accounts        # добавить
+GET    /api/platform/payment-accounts/:id    # один
+POST   /api/platform/payment-accounts/:id/verify
+DELETE /api/platform/payment-accounts/:id    # отключить (is_active=false)
 ```
 
-**Response:**
+Добавление:
+
+```jsonc
+// bank_account
+{ "accountType": "bank_account", "bankName": "Сбербанк",
+  "accountNumber": "40817810638050123456", "bic": "044525225", "inn": "7707083893" }
+
+// card — полный номер не принимаем
+{ "accountType": "card", "cardLast4": "4242", "cardHolder": "Ivan Petrov" }
+
+// sbp
+{ "accountType": "sbp", "phoneSbp": "+79991234567" }
+
+// paypal
+{ "accountType": "paypal", "paypalEmail": "owner@example.com" }
+
+// crypto
+{ "accountType": "crypto", "cryptoAddress": "bc1q…", "cryptoType": "btc" }
+```
+
+Ответ (обёрнут BFF в `{ success, data }`):
+
 ```json
 {
-  "id": "acc_7f8a9b2c",
+  "id": "0f8a…",
   "accountType": "bank_account",
-  "bankName": "Sberbank",
-  "accountNumber": "****0123456",  # Masked
+  "bankName": "Сбербанк",
+  "accountNumber": "****3456",
   "bic": "044525225",
   "isActive": true,
   "verificationStatus": "pending",
   "verifiedAt": null,
-  "createdAt": "2026-08-13T15:00:00Z"
+  "createdAt": "2026-08-13T15:00:00.000Z"
 }
 ```
 
-#### Получить список счетов
+`accountNumber` всегда маскирован до последних 4 цифр, `credentialsEnc` наружу не
+уходит вообще.
 
-```bash
-GET /owner/payment-accounts
+### Выплаты
 
-Response: [
-  {
-    "id": "acc_1",
-    "accountType": "bank_account",
-    "verificationStatus": "verified",
-    "isActive": true,
-    ...
-  }
-]
+```http
+GET  /api/platform/payouts               # список, ?status= для фильтра
+GET  /api/platform/payouts/:id           # одна
+POST /api/platform/payouts               # создать
+GET  /api/platform/payouts-stats         # сводка
 ```
 
-#### Получить детали счета
+Создание:
 
-```bash
-GET /owner/payment-accounts/:id
-```
-
-#### Верифицировать счет
-
-```bash
-POST /owner/payment-accounts/:id/verify
-
-Response: {
-  "id": "acc_1",
-  "verificationStatus": "verified",
-  "verifiedAt": "2026-08-13T15:05:00Z"
-}
-```
-
-#### Отключить счет
-
-```bash
-DELETE /owner/payment-accounts/:id
-
-Response: {
-  "id": "acc_1",
-  "isActive": false
-}
-```
-
-### Управление выплатами
-
-#### Создать выплату
-
-```bash
-POST /owner/payouts
-
-{
-  "accountId": "acc_7f8a9b2c",
-  "invoiceIds": ["inv_1", "inv_2", "inv_3"],
-  "amount": 145000
-}
-```
-
-**Требования:**
-- Account должен быть **verified**
-- Account должен быть **active**
-- Сумма должна быть > 0
-- invoiceIds — массив ID счетов, которые покрывает эта выплата
-
-**Response:**
 ```json
-{
-  "id": "payout_abc123",
-  "accountId": "acc_7f8a9b2c",
-  "invoiceIds": ["inv_1", "inv_2", "inv_3"],
-  "amount": "145000",
-  "currency": "RUB",
-  "status": "pending",
-  "createdAt": "2026-08-13T15:00:00Z"
-}
+{ "accountId": "0f8a…", "invoiceIds": ["inv_1", "inv_2"], "amount": 145000 }
 ```
 
-#### Получить список выплат
+Требования: счёт существует, `is_active = true` и `verification_status = 'verified'`.
+Иначе 404 или 400.
 
-```bash
-GET /owner/payouts
+Сводка:
 
-Response: [
-  {
-    "id": "payout_abc123",
-    "status": "completed",
-    "amount": 145000,
-    "completedAt": "2026-08-13T15:30:00Z"
-  }
-]
+```json
+{ "pending": 2, "processing": 1, "completed": 45, "failed": 2, "totalAmount": 6750000 }
 ```
 
-#### Получить детали выплаты
+## Схема БД
 
-```bash
-GET /owner/payouts/:id
+Миграция `0004_owner_payment_accounts.sql`, три таблицы:
 
-Response: {
-  "id": "payout_abc123",
-  "accountId": "acc_7f8a9b2c",
-  "invoiceIds": ["inv_1", "inv_2", "inv_3"],
-  "amount": 145000,
-  "status": "completed",
-  "completedAt": "2026-08-13T15:30:00Z",
-  "createdAt": "2026-08-13T15:00:00Z"
-}
-```
+**`owner_payment_accounts`** — реквизиты. Индексы по `(is_active, verification_status)`
+и `(account_type)`.
 
-#### Получить статистику выплат
+**`owner_payouts`** — выплаты. `account_id` → FK на реквизиты.
 
-```bash
-GET /owner/payouts-stats
+> `invoice_ids` имеет тип **`text`**, а не `text[]`: сервис кладёт туда
+> `JSON.stringify(ids)` и читает `JSON.parse`, согласовано со схемой drizzle
+> (`text('invoice_ids')`). С `text[]` Postgres отверг бы JSON-строку в рантайме —
+> на юнит-тестах это закреплено отдельной проверкой.
 
-Response: {
-  "pending": 2,
-  "processing": 1,
-  "completed": 45,
-  "failed": 2,
-  "totalAmount": 6750000
-}
-```
-
-## Жизненный цикл
-
-### 1. Регистрация платежного счета
-
-```bash
-POST /owner/payment-accounts
-→ Создается счет со статусом "pending"
-```
-
-### 2. Верификация счета
-
-```bash
-POST /owner/payment-accounts/:id/verify
-→ Счет получает статус "verified"
-→ Теперь можно использовать для выплат
-```
-
-### 3. Создание выплаты
-
-```bash
-POST /owner/payouts
-→ Выплата создается со статусом "pending"
-→ Привязывается к платежному счету
-→ Отслеживается история событий
-```
-
-### 4. Обработка выплаты
-
-- **pending** → Ждет отправки на счет
-- **processing** → Отправляется платежной системе
-- **completed** → Деньги зачислены владельцу
-- **failed** → Ошибка, требует пересбора
-
-## Примеры использования
-
-### Сценарий 1: Настройка платежа на карту
-
-```bash
-# 1. Добавить счет карты
-curl -X POST https://api.gatekeeper.ru/owner/payment-accounts \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "accountType": "card",
-    "cardLast4": "4242",
-    "cardHolder": "Aleksandr Ivanov"
-  }'
-# → acc_123
-
-# 2. Верифицировать счет
-curl -X POST https://api.gatekeeper.ru/owner/payment-accounts/acc_123/verify \
-  -H "Authorization: Bearer $TOKEN"
-
-# 3. Создать выплату
-curl -X POST https://api.gatekeeper.ru/owner/payouts \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{
-    "accountId": "acc_123",
-    "invoiceIds": ["inv_jul_client1", "inv_jul_client2"],
-    "amount": 50000
-  }'
-# → payout_xyz
-```
-
-### Сценарий 2: Выплата на банковский счет
-
-```bash
-# Полные реквизиты банка
-curl -X POST https://api.gatekeeper.ru/owner/payment-accounts \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{
-    "accountType": "bank_account",
-    "bankName": "Sberbank",
-    "accountNumber": "40817810638050123456",
-    "bic": "044525225",
-    "inn": "7707083893",
-    "swiftCode": "SABRRUMMSC"
-  }'
-
-# Верифицировать и использовать
-```
-
-### Сценарий 3: Выплата криптовалютой
-
-```bash
-curl -X POST https://api.gatekeeper.ru/owner/payment-accounts \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{
-    "accountType": "crypto",
-    "cryptoAddress": "1A1z7agoat4xFG8hE7Ezuw9wVoPz6ecyAD",
-    "cryptoType": "btc"
-  }'
-```
+**`owner_payout_events`** — журнал переходов: `initiated`, `processing`, `completed`,
+`failed`, `cancelled` + `details jsonb`.
 
 ## Безопасность
 
-### PCI DSS Compliance
+- Полные номера карт не хранятся — только последние 4 цифры
+- `accountNumber` маскируется на выходе из сервиса, не в UI
+- `credentialsEnc` вырезается из любого ответа
+- Доступ только при `role = 'owner'` **и** пустом `clientId`: owner-токен,
+  выданный в контексте клиента, к кассе платформы не пускают
+- Эндпоинты не проброшены наружу через nginx — только через BFF с сессионной кукой
+- Каждая выплата оставляет audit trail в `owner_payout_events`
 
-- ✅ Номера карт **не хранятся** (только последние 4 цифры)
-- ✅ Чувствительные данные **зашифрованы** в БД
-- ✅ Все операции **логируются** для аудита
-- ✅ Доступ **только для owner** role
-
-### Верификация счетов
-
-- Каждый счет требует верификации перед использованием
-- Администратор платформы должен проверить реквизиты вручную
-- Статус верификации отслеживается и логируется
-
-### История выплат
+## Тесты
 
 ```bash
-# Каждая выплата имеет audit trail:
-- initiated: Выплата создана
-- processing: Отправляется
-- completed: Успешно
-- failed: Ошибка (с описанием)
-- cancelled: Отменена
+pnpm test                        # весь монорепозиторий
+pnpm --filter @gatekeeper/api test
 ```
 
-## Миграции
+Юнит-тесты гоняются на **vitest** без Postgres: drizzle подменяется дублем
+`apps/api/src/owner/fake-db.ts`, который записывает, что именно сервис собирался
+положить в базу.
 
-### Migration 0004_owner_payment_accounts.sql
+Покрыто: валидация типа реквизитов, маскирование, отказ в выплате на
+неверифицированный/неактивный счёт, сериализация `invoiceIds` в JSON-строку,
+проставление `completed_at` только на финальных статусах, приведение bigint-счётчиков
+Postgres к числам, и полная матрица доступа (владелец / админ клиента /
+owner-токен с `clientId`) по всем девяти эндпоинтам.
 
-Создает 3 новые таблицы:
+## Деплой
 
-1. **owner_payment_accounts** - Платежные счета
-   - id (UUID)
-   - account_type (bank_account | card | sbp | paypal | crypto)
-   - verification_status (pending | verified | rejected)
-   - credentials_enc (зашифрованные реквизиты)
-   - Индексы: (is_active, verification_status), (account_type)
-
-2. **owner_payouts** - Выплаты
-   - id (UUID)
-   - account_id (FK)
-   - invoice_ids (JSON array)
-   - status (pending | processing | completed | failed)
-   - amount (numeric)
-   - Индексы: (status, created_at DESC), (account_id)
-
-3. **owner_payout_events** - История выплат
-   - id (bigserial)
-   - payout_id (FK)
-   - event (initiated | processing | completed | failed | cancelled)
-   - details (jsonb)
-   - created_at
-
-## Тестирование
-
-### Unit Tests
+Миграции применяются автоматически при старте контейнера
+(`CMD node dist/db/migrate.js && node dist/main.js`), отдельного шага не нужно.
 
 ```bash
-# Service Tests
-apps/api/src/owner/owner-payouts.service.spec.ts
-
-# Controller Tests
-apps/api/src/owner/owner-payouts.controller.spec.ts
+docker compose -f deploy/pve3/docker-compose.yml build --no-cache api web
+docker compose -f deploy/pve3/docker-compose.yml up -d
 ```
 
-**Покрытие:**
-- ✓ Добавление платежного счета
-- ✓ Верификация счета
-- ✓ Валидация данных
-- ✓ Создание выплаты
-- ✓ Отслеживание статуса
-- ✓ Авторизация (только owner)
-- ✓ Обработка ошибок
+`web` пересобирать обязательно — страница кабинета и BFF-роуты живут в нём.
 
-### Запуск тестов
+## Частые вопросы
 
-```bash
-npm run typecheck
-```
+**Почему curl по `/v1/platform/...` даёт 404?**
+Он не проброшен наружу. Ходи через `/api/platform/...` с сессионной кукой либо
+внутрь LXC на `http://localhost:3000/v1/platform/...`.
 
-## Развертывание
+**Можно ли отменить выплату?**
+Статус `cancelled` поддержан в журнале; отдельной ручки отмены пока нет — статус
+меняется через `updatePayoutStatus` в сервисе.
 
-1. **Database Migration**
-   ```bash
-   pnpm --filter @gatekeeper/api db:migrate
-   ```
+**Сколько реквизитов можно завести?**
+Сколько угодно, ограничения на один активный счёт каждого типа в схеме нет.
 
-2. **Deployment**
-   ```bash
-   git push origin main
-   ```
-
-3. **API становится доступным:**
-   - `/owner/payment-accounts`
-   - `/owner/payouts`
-   - `/owner/payouts-stats`
-
-## Мониторинг
-
-### Метрики для отслеживания
-
-```bash
-GET /owner/payouts-stats
-```
-
-- **pending**: Выплаты в очереди
-- **processing**: Отправляются сейчас
-- **completed**: Успешно зачислены
-- **failed**: Ошибки (требуют внимания)
-- **totalAmount**: Общая сумма выплачено
-
-### Логирование
-
-Все операции логируются через `OwnerPayoutsService` logger:
-- Создание счета
-- Верификация
-- Создание выплаты
-- Обновление статуса
-- Ошибки и исключения
-
-## FAQ
-
-**Q: Когда владелец получает выплаты?**
-A: Когда статус payout = 'completed'. Платежная система отправляет деньги в течение 1-3 дней.
-
-**Q: Можно ли отменить выплату?**
-A: Да, если статус = 'pending'. После 'processing' отмена требует обращения к платежной системе.
-
-**Q: Какие валюты поддерживаются?**
-A: Сейчас RUB. Расширение возможно через добавление поля `currency` в owner_payouts.
-
-**Q: Где хранятся номера карт?**
-A: Только последние 4 цифры + зашифрованные полные реквизиты. PCI DSS compliant.
-
-**Q: Сколько счетов может быть?**
-A: Неограниченно. Можно использовать несколько параллельно.
-
----
-
-*Документация актуальна для версии Gatekeeper 2.0+*
+**Какие валюты?**
+Сейчас только RUB (`currency` по умолчанию `'RUB'`).

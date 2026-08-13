@@ -51,7 +51,10 @@ CREATE INDEX IF NOT EXISTS owner_payment_accounts_type_idx
 CREATE TABLE IF NOT EXISTS owner_payouts (
     id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     account_id      uuid NOT NULL REFERENCES owner_payment_accounts(id),
-    invoice_ids     text[] NOT NULL, -- JSON массив ID счетов, которые покрывает эта выплата
+    -- JSON-массив ID счетов, которые покрывает выплата. Именно text, а не text[]:
+    -- сервис пишет сюда JSON.stringify(ids) и читает JSON.parse — сходится со схемой
+    -- drizzle (text('invoice_ids')). С text[] Postgres отверг бы JSON-строку.
+    invoice_ids     text NOT NULL,
     amount          numeric(12,2) NOT NULL,
     currency        text NOT NULL DEFAULT 'RUB',
     status          text NOT NULL DEFAULT 'pending', -- pending|processing|completed|failed|cancelled
