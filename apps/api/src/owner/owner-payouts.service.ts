@@ -11,8 +11,10 @@ import {
   ownerPaymentAccounts,
   ownerPayouts,
   ownerPayoutEvents,
-  platformInvoices,
 } from '../db/schema.js';
+
+/** Типы реквизитов, которые понимает система выплат. */
+export const ACCOUNT_TYPES = ['bank_account', 'card', 'sbp', 'paypal', 'crypto'] as const;
 
 export interface CreatePaymentAccountInput {
   accountType: string;
@@ -43,6 +45,11 @@ export class OwnerPayoutsService {
 
     if (!accountType) {
       throw new BadRequestException('accountType is required');
+    }
+    if (!(ACCOUNT_TYPES as readonly string[]).includes(accountType)) {
+      throw new BadRequestException(
+        `accountType must be one of: ${ACCOUNT_TYPES.join(', ')}`,
+      );
     }
 
     const [account] = await this.db
@@ -141,12 +148,10 @@ export class OwnerPayoutsService {
   }
 
   async listPayouts(status?: string) {
-    const query = this.db
-      .select()
-      .from(ownerPayouts)
-      .orderBy(sql`${ownerPayouts.createdAt} desc`);
-
-    const payouts = status ? await query.where(eq(ownerPayouts.status, status)) : await query;
+    // .where() обязан идти до .orderBy() — обратный порядок drizzle не собирает.
+    const base = this.db.select().from(ownerPayouts);
+    const filtered = status ? base.where(eq(ownerPayouts.status, status)) : base;
+    const payouts = await filtered.orderBy(sql`${ownerPayouts.createdAt} desc`);
 
     return payouts.map((p) => ({
       ...p,
@@ -218,13 +223,12 @@ export class OwnerPayoutsService {
     };
   }
 
-  private maskAccount(account: any) {
+  /** Наружу отдаём счёт без шифрованных реквизитов и с маскированным номером. */
+  private maskAccount(account: typeof ownerPaymentAccounts.$inferSelect) {
+    const { credentialsEnc: _credentialsEnc, ...safe } = account;
     return {
-      ...account,
-      accountNumber: account.accountNumber
-        ? `****${account.accountNumber.slice(-4)}`
-        : null,
-      credentialsEnc: undefined, // Never expose encrypted credentials
+      ...safe,
+      accountNumber: safe.accountNumber ? `****${safe.accountNumber.slice(-4)}` : null,
     };
   }
 }

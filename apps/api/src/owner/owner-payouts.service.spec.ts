@@ -1,398 +1,280 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { OwnerPayoutsService } from './owner-payouts.service';
-import { DB } from '../db/db.module';
-import { ownerPaymentAccounts, ownerPayouts, ownerPayoutEvents } from '../db/schema';
+import { OwnerPayoutsService, ACCOUNT_TYPES } from './owner-payouts.service.js';
+import { createFakeDb, type FakeDb } from './fake-db.js';
 
 describe('OwnerPayoutsService', () => {
   let service: OwnerPayoutsService;
-  let mockDb: any;
+  let fake: FakeDb;
 
-  beforeEach(async () => {
-    mockDb = {
-      insert: jest.fn().mockReturnThis(),
-      select: jest.fn().mockReturnThis(),
-      update: jest.fn().mockReturnThis(),
-      values: jest.fn().mockReturnThis(),
-      from: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockReturnThis(),
-      orderBy: jest.fn().mockReturnThis(),
-      returning: jest.fn(),
-    };
-
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        OwnerPayoutsService,
-        {
-          provide: DB,
-          useValue: mockDb,
-        },
-      ],
-    }).compile();
-
-    service = module.get<OwnerPayoutsService>(OwnerPayoutsService);
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
+  beforeEach(() => {
+    const created = createFakeDb();
+    fake = created.fake;
+    service = new OwnerPayoutsService(created.db);
   });
 
   describe('addPaymentAccount', () => {
-    it('should create payment account with valid data', async () => {
-      const accountData = {
-        accountType: 'bank_account',
-        bankName: 'Sberbank',
-        accountNumber: '40817810638050123456',
-        bic: '044525225',
-        inn: '7707083893',
-      };
-
-      mockDb.returning.mockResolvedValue([
-        {
-          id: 'acc_123',
-          ...accountData,
-          isActive: true,
-          verificationStatus: 'pending',
-        },
-      ]);
-
-      const result = await service.addPaymentAccount(accountData);
-
-      expect(mockDb.insert).toHaveBeenCalled();
-      expect(result).toBeDefined();
-      expect(result.accountType).toBe('bank_account');
-    });
-
-    it('should throw BadRequestException if accountType missing', async () => {
-      const invalidData = {
-        bankName: 'Sberbank',
-      };
-
-      await expect(service.addPaymentAccount(invalidData as any)).rejects.toThrow(
+    it('отвергает пустой accountType', async () => {
+      await expect(service.addPaymentAccount({} as never)).rejects.toBeInstanceOf(
         BadRequestException,
       );
     });
 
-    it('should create card payment account', async () => {
-      const accountData = {
-        accountType: 'card',
-        cardLast4: '4242',
-        cardHolder: 'Ivan Petrov',
-      };
-
-      mockDb.returning.mockResolvedValue([
-        {
-          id: 'acc_card_123',
-          ...accountData,
-          isActive: true,
-          verificationStatus: 'pending',
-        },
-      ]);
-
-      const result = await service.addPaymentAccount(accountData);
-
-      expect(result.accountType).toBe('card');
-      expect(result.cardLast4).toBe('4242');
+    it('отвергает незнакомый accountType', async () => {
+      await expect(
+        service.addPaymentAccount({ accountType: 'monopoly_money' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('should create SBP payment account', async () => {
-      const accountData = {
-        accountType: 'sbp',
-        phoneSbp: '+79991234567',
-      };
+    it.each(ACCOUNT_TYPES)('принимает тип %s', async (accountType) => {
+      fake.queue([{ id: 'acc_1', accountType, accountNumber: null }]);
+      const account = await service.addPaymentAccount({ accountType });
+      expect(account.accountType).toBe(accountType);
+    });
 
-      mockDb.returning.mockResolvedValue([
+    it('создаёт счёт со статусом pending и активным флагом', async () => {
+      fake.queue([{ id: 'acc_1', accountType: 'sbp', accountNumber: null }]);
+      await service.addPaymentAccount({ accountType: 'sbp', phoneSbp: '+79991234567' });
+
+      const [values] = fake.argsOf('values') as [Record<string, unknown>];
+      expect(values.verificationStatus).toBe('pending');
+      expect(values.isActive).toBe(true);
+      expect(values.phoneSbp).toBe('+79991234567');
+    });
+
+    it('маскирует номер счёта и не отдаёт шифрованные реквизиты', async () => {
+      fake.queue([
         {
-          id: 'acc_sbp_123',
-          ...accountData,
-          isActive: true,
-          verificationStatus: 'pending',
+          id: 'acc_1',
+          accountType: 'bank_account',
+          accountNumber: '40817810638050123456',
+          credentialsEnc: 'secret-blob',
         },
       ]);
 
-      const result = await service.addPaymentAccount(accountData);
+      const account = await service.addPaymentAccount({ accountType: 'bank_account' });
 
-      expect(result.accountType).toBe('sbp');
-      expect(result.phoneSbp).toBe('+79991234567');
+      expect(account.accountNumber).toBe('****3456');
+      expect(account).not.toHaveProperty('credentialsEnc');
     });
   });
 
   describe('listPaymentAccounts', () => {
-    it('should return list of payment accounts', async () => {
-      const mockAccounts = [
-        {
-          id: 'acc_1',
-          accountType: 'bank_account',
-          isActive: true,
-          verificationStatus: 'verified',
-          accountNumber: '40817810638050123456',
-        },
-        {
-          id: 'acc_2',
-          accountType: 'card',
-          isActive: true,
-          verificationStatus: 'pending',
-          cardLast4: '4242',
-        },
-      ];
+    it('маскирует каждый счёт в списке', async () => {
+      fake.queue([
+        { id: 'a', accountNumber: '40817810638050123456', credentialsEnc: 'x' },
+        { id: 'b', accountNumber: null, credentialsEnc: 'y' },
+      ]);
 
-      mockDb.orderBy.mockResolvedValue(mockAccounts);
+      const accounts = await service.listPaymentAccounts();
 
-      const result = await service.listPaymentAccounts();
-
-      expect(Array.isArray(result)).toBe(true);
-      expect(result.length).toBe(2);
-    });
-
-    it('should mask sensitive account data', async () => {
-      const mockAccounts = [
-        {
-          id: 'acc_1',
-          accountType: 'bank_account',
-          accountNumber: '40817810638050123456',
-          credentialsEnc: 'encrypted_data_here',
-        },
-      ];
-
-      mockDb.orderBy.mockResolvedValue(mockAccounts);
-
-      const result = await service.listPaymentAccounts();
-
-      expect(result[0].accountNumber).toContain('****');
-      expect(result[0].credentialsEnc).toBeUndefined();
+      expect(accounts).toHaveLength(2);
+      expect(accounts[0].accountNumber).toBe('****3456');
+      expect(accounts[1].accountNumber).toBeNull();
+      expect(accounts.every((a) => !('credentialsEnc' in a))).toBe(true);
     });
   });
 
   describe('getPaymentAccount', () => {
-    it('should return payment account by id', async () => {
-      const mockAccount = {
-        id: 'acc_123',
-        accountType: 'bank_account',
-        isActive: true,
-        verificationStatus: 'verified',
-      };
-
-      mockDb.limit.mockResolvedValue([mockAccount]);
-
-      const result = await service.getPaymentAccount('acc_123');
-
-      expect(result).toBeDefined();
-      expect(result.id).toBe('acc_123');
+    it('возвращает счёт по id', async () => {
+      fake.queue([{ id: 'acc_1', accountNumber: null }]);
+      await expect(service.getPaymentAccount('acc_1')).resolves.toMatchObject({
+        id: 'acc_1',
+      });
     });
 
-    it('should throw NotFoundException if account not found', async () => {
-      mockDb.limit.mockResolvedValue([]);
-
-      await expect(service.getPaymentAccount('invalid_id')).rejects.toThrow(
+    it('бросает NotFound, когда счёта нет', async () => {
+      fake.queue([]);
+      await expect(service.getPaymentAccount('нет-такого')).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });
   });
 
   describe('verifyAccount', () => {
-    it('should verify payment account', async () => {
-      const verifiedAccount = {
-        id: 'acc_123',
-        verificationStatus: 'verified',
-        verifiedAt: new Date(),
-      };
+    it('проставляет verified и время верификации', async () => {
+      fake.queue([
+        { id: 'acc_1', verificationStatus: 'verified', accountNumber: null },
+      ]);
 
-      mockDb.returning.mockResolvedValue([verifiedAccount]);
+      const account = await service.verifyAccount('acc_1');
 
-      const result = await service.verifyAccount('acc_123');
+      expect(account.verificationStatus).toBe('verified');
+      const [patch] = fake.argsOf('set') as [Record<string, unknown>];
+      expect(patch.verificationStatus).toBe('verified');
+      expect(patch.verifiedAt).toBeInstanceOf(Date);
+    });
 
-      expect(result.verificationStatus).toBe('verified');
-      expect(result.verifiedAt).toBeDefined();
+    it('бросает NotFound на несуществующем счёте', async () => {
+      fake.queue([]);
+      await expect(service.verifyAccount('нет')).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
   describe('deactivateAccount', () => {
-    it('should deactivate payment account', async () => {
-      const deactivatedAccount = {
-        id: 'acc_123',
-        isActive: false,
-      };
+    it('снимает флаг активности', async () => {
+      fake.queue([{ id: 'acc_1', isActive: false, accountNumber: null }]);
 
-      mockDb.returning.mockResolvedValue([deactivatedAccount]);
+      const account = await service.deactivateAccount('acc_1');
 
-      const result = await service.deactivateAccount('acc_123');
-
-      expect(result.isActive).toBe(false);
+      expect(account.isActive).toBe(false);
+      const [patch] = fake.argsOf('set') as [Record<string, unknown>];
+      expect(patch.isActive).toBe(false);
     });
   });
 
   describe('createPayout', () => {
-    it('should create payout for verified account', async () => {
-      mockDb.limit.mockResolvedValue([
-        {
-          id: 'acc_123',
-          verificationStatus: 'verified',
-          isActive: true,
-        },
-      ]);
-
-      const payoutData = {
-        id: 'payout_123',
-        accountId: 'acc_123',
-        invoiceIds: JSON.stringify(['inv_1', 'inv_2']),
-        amount: '50000',
-        status: 'pending',
-      };
-
-      mockDb.returning.mockResolvedValue([payoutData]);
-
-      const result = await service.createPayout('acc_123', ['inv_1', 'inv_2'], 50000);
-
-      expect(result).toBeDefined();
-      expect(result.status).toBe('pending');
+    it('бросает NotFound, если активного счёта нет', async () => {
+      fake.queue([]);
+      await expect(service.createPayout('acc_1', ['inv_1'], 100)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
 
-    it('should throw error if account not found', async () => {
-      mockDb.limit.mockResolvedValue([]);
-
-      await expect(
-        service.createPayout('invalid_acc', ['inv_1'], 50000),
-      ).rejects.toThrow(NotFoundException);
+    it('запрещает выплату на неверифицированный счёт', async () => {
+      fake.queue([[{ id: 'acc_1', verificationStatus: 'pending', isActive: true }]][0]);
+      await expect(service.createPayout('acc_1', ['inv_1'], 100)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
     });
 
-    it('should throw error if account not verified', async () => {
-      mockDb.limit.mockResolvedValue([
-        {
-          id: 'acc_123',
-          verificationStatus: 'pending',
-          isActive: true,
-        },
-      ]);
+    it('пишет invoiceIds JSON-строкой — колонка invoice_ids имеет тип text', async () => {
+      fake.queue(
+        [{ id: 'acc_1', verificationStatus: 'verified', isActive: true }],
+        [{ id: 'payout_1', status: 'pending' }],
+        [],
+      );
 
-      await expect(
-        service.createPayout('acc_123', ['inv_1'], 50000),
-      ).rejects.toThrow(BadRequestException);
+      const payout = await service.createPayout('acc_1', ['inv_1', 'inv_2'], 50000);
+
+      expect(payout.status).toBe('pending');
+      const [values] = fake.argsOf('values') as [Record<string, unknown>];
+      expect(typeof values.invoiceIds).toBe('string');
+      expect(JSON.parse(values.invoiceIds as string)).toEqual(['inv_1', 'inv_2']);
+      expect(values.amount).toBe('50000');
+      expect(values.status).toBe('pending');
+    });
+
+    it('заводит событие initiated в журнале выплат', async () => {
+      fake.queue(
+        [{ id: 'acc_1', verificationStatus: 'verified', isActive: true }],
+        [{ id: 'payout_1', status: 'pending' }],
+        [],
+      );
+
+      await service.createPayout('acc_1', ['inv_1'], 100);
+
+      const event = fake.argsOf('values', 1) as [Record<string, unknown>];
+      expect(event[0].event).toBe('initiated');
+      expect(event[0].payoutId).toBe('payout_1');
     });
   });
 
   describe('listPayouts', () => {
-    it('should return list of payouts', async () => {
-      const mockPayouts = [
-        {
-          id: 'payout_1',
-          invoiceIds: JSON.stringify(['inv_1']),
-          amount: '50000',
-          status: 'completed',
-        },
-        {
-          id: 'payout_2',
-          invoiceIds: JSON.stringify(['inv_2', 'inv_3']),
-          amount: '75000',
-          status: 'pending',
-        },
-      ];
+    it('разбирает invoiceIds и приводит сумму к числу', async () => {
+      fake.queue([
+        { id: 'p1', invoiceIds: JSON.stringify(['inv_1', 'inv_2']), amount: '50000' },
+      ]);
 
-      mockDb.orderBy.mockResolvedValue(mockPayouts);
+      const payouts = await service.listPayouts();
 
-      const result = await service.listPayouts();
-
-      expect(Array.isArray(result)).toBe(true);
-      expect(result.length).toBe(2);
+      expect(payouts[0].invoiceIds).toEqual(['inv_1', 'inv_2']);
+      expect(payouts[0].amount).toBe(50000);
     });
 
-    it('should parse invoice IDs from JSON', async () => {
-      const mockPayouts = [
-        {
-          id: 'payout_1',
-          invoiceIds: JSON.stringify(['inv_1', 'inv_2']),
-          amount: '50000',
-          status: 'completed',
-        },
-      ];
+    it('фильтрует по статусу до сортировки', async () => {
+      fake.queue([]);
+      await service.listPayouts('completed');
 
-      mockDb.orderBy.mockResolvedValue(mockPayouts);
-
-      const result = await service.listPayouts();
-
-      expect(Array.isArray(result[0].invoiceIds)).toBe(true);
-      expect(result[0].invoiceIds).toContain('inv_1');
+      const methods = fake.calls.map((c) => c.method);
+      expect(methods.indexOf('where')).toBeGreaterThan(-1);
+      expect(methods.indexOf('where')).toBeLessThan(methods.indexOf('orderBy'));
     });
   });
 
   describe('getPayout', () => {
-    it('should return payout by id', async () => {
-      const mockPayout = {
-        id: 'payout_123',
-        invoiceIds: JSON.stringify(['inv_1']),
-        amount: '50000',
-        status: 'completed',
-      };
+    it('возвращает выплату с разобранными полями', async () => {
+      fake.queue([{ id: 'p1', invoiceIds: JSON.stringify(['inv_1']), amount: '1500.50' }]);
 
-      mockDb.limit.mockResolvedValue([mockPayout]);
+      const payout = await service.getPayout('p1');
 
-      const result = await service.getPayout('payout_123');
-
-      expect(result.id).toBe('payout_123');
-      expect(result.amount).toBe(50000);
+      expect(payout.invoiceIds).toEqual(['inv_1']);
+      expect(payout.amount).toBe(1500.5);
     });
 
-    it('should throw NotFoundException if payout not found', async () => {
-      mockDb.limit.mockResolvedValue([]);
-
-      await expect(service.getPayout('invalid_id')).rejects.toThrow(NotFoundException);
+    it('бросает NotFound на несуществующей выплате', async () => {
+      fake.queue([]);
+      await expect(service.getPayout('нет')).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
   describe('updatePayoutStatus', () => {
-    it('should update payout status', async () => {
-      const updatedPayout = {
-        id: 'payout_123',
-        status: 'completed',
-        completedAt: new Date(),
-      };
+    it('проставляет completedAt для завершающих статусов', async () => {
+      fake.queue([{ id: 'p1', status: 'completed' }], []);
 
-      mockDb.returning.mockResolvedValue([updatedPayout]);
+      await service.updatePayoutStatus('p1', 'completed');
 
-      const result = await service.updatePayoutStatus('payout_123', 'completed');
-
-      expect(result.status).toBe('completed');
+      const [patch] = fake.argsOf('set') as [Record<string, unknown>];
+      expect(patch.completedAt).toBeInstanceOf(Date);
     });
 
-    it('should record error message on failed status', async () => {
-      const failedPayout = {
-        id: 'payout_123',
-        status: 'failed',
-        errorMessage: 'Insufficient funds',
-        completedAt: new Date(),
-      };
+    it('не ставит completedAt для промежуточного processing', async () => {
+      fake.queue([{ id: 'p1', status: 'processing' }], []);
 
-      mockDb.returning.mockResolvedValue([failedPayout]);
+      await service.updatePayoutStatus('p1', 'processing');
 
-      const result = await service.updatePayoutStatus(
-        'payout_123',
-        'failed',
-        'Insufficient funds',
+      const [patch] = fake.argsOf('set') as [Record<string, unknown>];
+      expect(patch.completedAt).toBeUndefined();
+    });
+
+    it('сохраняет текст ошибки при failed', async () => {
+      fake.queue([{ id: 'p1', status: 'failed', errorMessage: 'нет средств' }], []);
+
+      const payout = await service.updatePayoutStatus('p1', 'failed', 'нет средств');
+
+      expect(payout.errorMessage).toBe('нет средств');
+    });
+
+    it('бросает NotFound на несуществующей выплате', async () => {
+      fake.queue([]);
+      await expect(service.updatePayoutStatus('нет', 'completed')).rejects.toBeInstanceOf(
+        NotFoundException,
       );
-
-      expect(result.errorMessage).toBe('Insufficient funds');
     });
   });
 
   describe('getPayoutStats', () => {
-    it('should return payout statistics', async () => {
-      mockDb.select.mockResolvedValue([
+    it('приводит счётчики Postgres (bigint приходит строкой) к числам', async () => {
+      fake.queue([
         {
-          pendingCount: 2,
-          processingCount: 1,
-          completedCount: 15,
-          failedCount: 0,
-          totalAmount: '1250000',
+          pendingCount: '2',
+          processingCount: '1',
+          completedCount: '15',
+          failedCount: '0',
+          totalAmount: '1250000.00',
         },
       ]);
 
-      const result = await service.getPayoutStats();
+      const stats = await service.getPayoutStats();
 
-      expect(result.pending).toBe(2);
-      expect(result.processing).toBe(1);
-      expect(result.completed).toBe(15);
-      expect(result.failed).toBe(0);
-      expect(result.totalAmount).toBe(1250000);
+      expect(stats).toEqual({
+        pending: 2,
+        processing: 1,
+        completed: 15,
+        failed: 0,
+        totalAmount: 1250000,
+      });
+    });
+
+    it('отдаёт нули на пустой таблице', async () => {
+      fake.queue([]);
+      await expect(service.getPayoutStats()).resolves.toEqual({
+        pending: 0,
+        processing: 0,
+        completed: 0,
+        failed: 0,
+        totalAmount: 0,
+      });
     });
   });
 });

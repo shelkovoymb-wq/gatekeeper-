@@ -2,106 +2,99 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
+  HttpCode,
   Param,
   Post,
+  Query,
   UseGuards,
-  HttpCode,
-  BadRequestException,
 } from '@nestjs/common';
 import { Auth, JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthContext } from '../auth/auth.types.js';
-import { OwnerPayoutsService } from './owner-payouts.service.js';
+import {
+  OwnerPayoutsService,
+  type CreatePaymentAccountInput,
+} from './owner-payouts.service.js';
 
-function requireOwner(auth: AuthContext): void {
-  if (auth.role !== 'owner') {
-    throw new BadRequestException('Only platform owner can access this');
+/**
+ * Реквизиты владельца платформы и выплаты на них.
+ *
+ * Префикс — v1/platform, как у остальных владельческих эндпоинтов: наружу через
+ * nginx проброшены только /healthz, /tg/ и /payments/webhook/, а всё владельческое
+ * ходит через BFF Next.js по внутренней сети (см. deploy/pve3/gatekeeper-proxy).
+ * Собственный префикс вроде /owner был бы недостижим из браузера.
+ */
+function assertOwner(auth: AuthContext): void {
+  if (auth.role !== 'owner' || auth.clientId) {
+    throw new ForbiddenException('доступ только для владельца платформы');
   }
 }
 
-@Controller('owner')
+@Controller('v1/platform')
 @UseGuards(JwtAuthGuard)
 export class OwnerPayoutsController {
   constructor(private readonly payouts: OwnerPayoutsService) {}
 
-  // ─── ПЛАТЕЖНЫЕ СЧЕТА ─────────────────────────────────────────────────────
+  // ─── Платёжные счета ──────────────────────────────────────────────────────
 
   @Post('payment-accounts')
-  async addPaymentAccount(
-    @Auth() auth: AuthContext,
-    @Body()
-    input: {
-      accountType: string;
-      provider?: string;
-      bankName?: string;
-      accountNumber?: string;
-      bic?: string;
-      inn?: string;
-      phoneSbp?: string;
-      paypalEmail?: string;
-      cryptoAddress?: string;
-      cryptoType?: string;
-      cardLast4?: string;
-      cardHolder?: string;
-    },
-  ) {
-    requireOwner(auth);
+  addPaymentAccount(@Auth() auth: AuthContext, @Body() input: CreatePaymentAccountInput) {
+    assertOwner(auth);
     return this.payouts.addPaymentAccount(input);
   }
 
   @Get('payment-accounts')
-  async listPaymentAccounts(@Auth() auth: AuthContext) {
-    requireOwner(auth);
+  listPaymentAccounts(@Auth() auth: AuthContext) {
+    assertOwner(auth);
     return this.payouts.listPaymentAccounts();
   }
 
   @Get('payment-accounts/:id')
-  async getPaymentAccount(@Auth() auth: AuthContext, @Param('id') accountId: string) {
-    requireOwner(auth);
+  getPaymentAccount(@Auth() auth: AuthContext, @Param('id') accountId: string) {
+    assertOwner(auth);
     return this.payouts.getPaymentAccount(accountId);
   }
 
   @Post('payment-accounts/:id/verify')
   @HttpCode(200)
-  async verifyAccount(@Auth() auth: AuthContext, @Param('id') accountId: string) {
-    requireOwner(auth);
+  verifyAccount(@Auth() auth: AuthContext, @Param('id') accountId: string) {
+    assertOwner(auth);
     return this.payouts.verifyAccount(accountId);
   }
 
   @Delete('payment-accounts/:id')
-  async deactivateAccount(@Auth() auth: AuthContext, @Param('id') accountId: string) {
-    requireOwner(auth);
+  deactivateAccount(@Auth() auth: AuthContext, @Param('id') accountId: string) {
+    assertOwner(auth);
     return this.payouts.deactivateAccount(accountId);
   }
 
-  // ─── ВЫПЛАТЫ ─────────────────────────────────────────────────────────────
+  // ─── Выплаты ──────────────────────────────────────────────────────────────
 
   @Post('payouts')
-  async createPayout(
+  createPayout(
     @Auth() auth: AuthContext,
     @Body() input: { accountId: string; invoiceIds: string[]; amount: number },
   ) {
-    requireOwner(auth);
+    assertOwner(auth);
     return this.payouts.createPayout(input.accountId, input.invoiceIds, input.amount);
   }
 
+  @Get('payouts-stats')
+  getPayoutStats(@Auth() auth: AuthContext) {
+    assertOwner(auth);
+    return this.payouts.getPayoutStats();
+  }
+
   @Get('payouts')
-  async listPayouts(
-    @Auth() auth: AuthContext,
-  ) {
-    requireOwner(auth);
-    return this.payouts.listPayouts();
+  listPayouts(@Auth() auth: AuthContext, @Query('status') status?: string) {
+    assertOwner(auth);
+    return this.payouts.listPayouts(status);
   }
 
   @Get('payouts/:id')
-  async getPayout(@Auth() auth: AuthContext, @Param('id') payoutId: string) {
-    requireOwner(auth);
+  getPayout(@Auth() auth: AuthContext, @Param('id') payoutId: string) {
+    assertOwner(auth);
     return this.payouts.getPayout(payoutId);
-  }
-
-  @Get('payouts-stats')
-  async getPayoutStats(@Auth() auth: AuthContext) {
-    requireOwner(auth);
-    return this.payouts.getPayoutStats();
   }
 }

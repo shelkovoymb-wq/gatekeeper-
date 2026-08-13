@@ -13,6 +13,7 @@
     "db:generate": "pnpm --filter @gatekeeper/api db:generate",
     "db:migrate": "pnpm --filter @gatekeeper/api db:migrate",
     "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck"
   }
 }

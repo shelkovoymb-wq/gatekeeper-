@@ -23,7 +23,9 @@ git checkout main
 git reset --hard origin/main
 
 echo "🔨 Пересобираю Docker образы..."
-docker compose -f deploy/pve3/docker-compose.yml build --no-cache api
+# web пересобираем вместе с api: страницы кабинета и BFF-роуты живут в нём,
+# без этого новые экраны в проде не появятся.
+docker compose -f deploy/pve3/docker-compose.yml build --no-cache api web
 
 echo "🔄 Перезапускаю контейнеры..."
 docker compose -f deploy/pve3/docker-compose.yml down
