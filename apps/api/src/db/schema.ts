@@ -385,3 +385,77 @@ export const auditLog = pgTable('audit_log', {
   payload: jsonb('payload'),
   createdAt: nowDefault(),
 });
+
+// ─── ПЛАТЕЖНЫЕ РЕКВИЗИТЫ ВЛАДЕЛЬЦА ────────────────────────────────────────────
+
+export const ownerPaymentAccounts = pgTable(
+  'owner_payment_accounts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    accountType: text('account_type').notNull(), // bank_account|card|sbp|paypal|crypto
+    provider: text('provider'), // yookassa|prodamus|manual|cryptobot
+    // Банковские реквизиты
+    bankName: text('bank_name'),
+    accountNumber: text('account_number'),
+    bic: text('bic'),
+    inn: text('inn'),
+    // СБП
+    phoneSbp: text('phone_sbp'),
+    // PayPal
+    paypalEmail: text('paypal_email'),
+    // Крипто
+    cryptoAddress: text('crypto_address'),
+    cryptoType: text('crypto_type'), // btc|eth|usdt
+    // Карта (only last 4 for PCI compliance)
+    cardLast4: text('card_last4'),
+    cardHolder: text('card_holder'),
+    // Статусы
+    isActive: boolean('is_active').notNull().default(true),
+    verificationStatus: text('verification_status').notNull().default('pending'),
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    credentialsEnc: text('credentials_enc'), // зашифрованные реквизиты
+    // Доп. реквизиты
+    bankCode: text('bank_code'),
+    sortCode: text('sort_code'),
+    swiftCode: text('swift_code'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    activeIdx: index('owner_payment_accounts_active_idx').on(t.isActive, t.verificationStatus),
+    typeIdx: index('owner_payment_accounts_type_idx').on(t.accountType),
+  }),
+);
+
+export const ownerPayouts = pgTable(
+  'owner_payouts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => ownerPaymentAccounts.id),
+    invoiceIds: text('invoice_ids').notNull(), // JSON array of platform_invoice IDs
+    amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+    currency: text('currency').notNull().default('RUB'),
+    status: text('status').notNull().default('pending'), // pending|processing|completed|failed|cancelled
+    providerPayoutId: text('provider_payout_id'),
+    errorMessage: text('error_message'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    statusIdx: index('owner_payouts_status_idx').on(t.status, t.createdAt),
+    accountIdx: index('owner_payouts_account_idx').on(t.accountId),
+  }),
+);
+
+export const ownerPayoutEvents = pgTable('owner_payout_events', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  payoutId: uuid('payout_id')
+    .notNull()
+    .references(() => ownerPayouts.id),
+  event: text('event').notNull(), // initiated|processing|completed|failed|cancelled
+  details: jsonb('details').notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
