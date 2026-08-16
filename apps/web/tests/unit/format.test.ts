@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatMoney, formatNumber, formatDate } from '@/lib/format'
+import { formatMoney, formatNumber, formatDate, formatCompact, formatDay } from '@/lib/format'
 
 // Intl вставляет неразрывные пробелы — сравнивать по подстрокам надёжнее,
 // чем по точной строке, которая зависит от версии ICU.
@@ -31,6 +31,30 @@ describe('formatNumber', () => {
 
   it('оставляет малые числа как есть', () => {
     expect(formatNumber(42)).toBe('42')
+  })
+})
+
+describe('formatCompact', () => {
+  it('сокращает крупные суммы для оси графика', () => {
+    expect(formatCompact(2_400_000)).toBe('2,4 млн')
+    expect(formatCompact(340_000)).toBe('340 тыс')
+    expect(formatCompact(1_500_000_000)).toBe('1,5 млрд')
+  })
+
+  it('мелкие числа оставляет читаемыми', () => {
+    expect(formatCompact(0)).toBe('0')
+    expect(formatCompact(950)).toBe('950')
+  })
+})
+
+describe('formatDay', () => {
+  it('печатает дату без времени', () => {
+    expect(formatDay('2026-08-13')).toBe('13.08.2026')
+  })
+
+  it('отдаёт прочерк на пустом и битом значении', () => {
+    expect(formatDay()).toBe('—')
+    expect(formatDay('не-дата')).toBe('—')
   })
 })
 

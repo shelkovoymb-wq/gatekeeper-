@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { StatsTile } from '@/components/StatsTile'
 import { formatMoney, formatNumber } from '@/lib/format'
 
@@ -34,11 +35,19 @@ export default function OwnerOverviewPage() {
 
   return (
     <div>
-      <header className="mb-8">
-        <h1 className="font-display text-2xl text-ledger-page md:text-3xl">Платформа</h1>
-        <p className="mt-1 text-sm text-ledger-page/60">
-          Сводка по всем клиентам, обороту и комиссии платформы
-        </p>
+      <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl text-ledger-page md:text-3xl">Платформа</h1>
+          <p className="mt-1 text-sm text-ledger-page/60">
+            Сводка по всем клиентам, обороту и комиссии платформы
+          </p>
+        </div>
+        <Link
+          href="/owner/analytics"
+          className="rounded-sm bg-ledger-brass px-4 py-2 text-sm font-bold text-ledger-cover transition hover:brightness-110"
+        >
+          📊 Детальная статистика и экспорт
+        </Link>
       </header>
 
       {error && (

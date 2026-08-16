@@ -11,6 +11,7 @@ import {
 import { Auth, JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthContext } from '../auth/auth.types.js';
 import { PlatformService } from './platform.service.js';
+import { PlatformAnalyticsService } from './platform-analytics.service.js';
 
 /** Доступ только владельцу платформы (role=owner, без привязки к клиенту). */
 function assertOwner(auth: AuthContext): void {
@@ -22,12 +23,29 @@ function assertOwner(auth: AuthContext): void {
 @Controller('v1/platform')
 @UseGuards(JwtAuthGuard)
 export class PlatformController {
-  constructor(private readonly platform: PlatformService) {}
+  constructor(
+    private readonly platform: PlatformService,
+    private readonly analytics: PlatformAnalyticsService,
+  ) {}
 
   @Get('overview')
   overview(@Auth() auth: AuthContext) {
     assertOwner(auth);
     return this.platform.overview();
+  }
+
+  /** Детальная статистика по клиентам, каналам и платежам за период. */
+  @Get('analytics')
+  analyticsReport(
+    @Auth() auth: AuthContext,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('granularity') granularity?: string,
+    @Query('clientId') clientId?: string,
+    @Query('limit') limit?: string,
+  ) {
+    assertOwner(auth);
+    return this.analytics.report({ from, to, granularity, clientId, limit });
   }
 
   @Get('clients')

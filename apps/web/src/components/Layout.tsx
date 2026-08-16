@@ -22,6 +22,7 @@ const clientNav = [
 
 const ownerNav = [
   { href: '/owner/overview', label: 'Платформа', icon: '📈' },
+  { href: '/owner/analytics', label: 'Детальная статистика', icon: '📊' },
   { href: '/owner/clients', label: 'Клиенты', icon: '🏢' },
   { href: '/owner/plans', label: 'Тарифы платформы', icon: '🏷️' },
   { href: '/owner/billing', label: 'Биллинг', icon: '🧾' },
