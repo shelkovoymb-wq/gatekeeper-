@@ -22,9 +22,16 @@ CREATE TABLE IF NOT EXISTS direct_payment_accounts (
   verified_at timestamptz,
   -- Аудит
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT unique_active_account_per_client UNIQUE (client_id, account_type) WHERE is_active = true
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- «Один активный счёт каждого типа на клиента». Табличным CONSTRAINT ... UNIQUE
+-- это не выразить: WHERE в нём Postgres не принимает (syntax error at or near
+-- "WHERE") и раннер миграций падал на этом файле. Частичная уникальность
+-- задаётся только частичным уникальным индексом.
+CREATE UNIQUE INDEX IF NOT EXISTS direct_payment_accounts_active_uniq
+  ON direct_payment_accounts (client_id, account_type)
+  WHERE is_active;
 
 CREATE INDEX IF NOT EXISTS direct_payment_accounts_client_idx ON direct_payment_accounts(client_id);
 CREATE INDEX IF NOT EXISTS direct_payment_accounts_status_idx ON direct_payment_accounts(verification_status);
