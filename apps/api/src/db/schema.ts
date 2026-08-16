@@ -69,10 +69,39 @@ export const clientUsers = pgTable('client_users', {
   clientId: uuid('client_id').references(() => clients.id), // NULL — владелец платформы
   role: text('role').notNull(), // owner | client_admin | client_staff
   email: citext('email').unique(),
+  // NULL у пользователей, заведённых через Google/Яндекс: пароля у них нет.
   passwordHash: text('password_hash'),
   tgUserId: bigint('tg_user_id', { mode: 'number' }).unique(),
+  // 2FA (TOTP). Секрет — в конверте SecretBox, как и токены ботов.
+  totpSecretEnc: text('totp_secret_enc'),
+  totpEnabled: boolean('totp_enabled').notNull().default(false),
+  totpConfirmedAt: timestamp('totp_confirmed_at', { withTimezone: true }),
+  totpBackupCodes: jsonb('totp_backup_codes').notNull().default(sql`'[]'::jsonb`),
+  totpLastStep: bigint('totp_last_step', { mode: 'number' }),
   createdAt: nowDefault(),
 });
+
+/** Привязки внешних аккаунтов (OAuth): google | yandex. */
+export const userIdentities = pgTable(
+  'user_identities',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => clientUsers.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    providerUserId: text('provider_user_id').notNull(),
+    email: citext('email'),
+    displayName: text('display_name'),
+    avatarUrl: text('avatar_url'),
+    createdAt: nowDefault(),
+    lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+  },
+  (t) => ({
+    byProviderAccount: uniqueIndex('user_identities_provider_uq').on(t.provider, t.providerUserId),
+    byUserProvider: uniqueIndex('user_identities_user_provider_uq').on(t.userId, t.provider),
+  }),
+);
 
 export const platformInvoices = pgTable(
   'platform_invoices',

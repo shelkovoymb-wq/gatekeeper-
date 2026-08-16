@@ -4,6 +4,18 @@ import { cookies } from 'next/headers'
 // JWT берётся из httpOnly-cookie сессии — в браузер токен не отдаём.
 const BACKEND_URL = process.env.BACKEND_URL || 'http://api:3000'
 export const SESSION_COOKIE = 'gk_session'
+/** Промежуточный токен между «пароль верен» и «код 2FA введён». */
+export const TWO_FACTOR_COOKIE = 'gk_2fa'
+/** CSRF-state OAuth-редиректа: сверяется с `state` из query на возврате. */
+export const OAUTH_STATE_COOKIE = 'gk_oauth_state'
+
+/** Общие атрибуты httpOnly-cookie: наружу (в JS браузера) ничего не отдаём. */
+export const secureCookie = {
+  httpOnly: true as const,
+  sameSite: 'lax' as const,
+  secure: true,
+  path: '/',
+}
 
 async function sessionToken(): Promise<string> {
   const c = await cookies()
@@ -73,4 +85,41 @@ export async function backendAuth<T = unknown>(path: string, body: unknown): Pro
     cache: 'no-store',
   })
   return (await parse(res)) as T
+}
+
+/** Публичный GET к бэкенду (список OAuth-провайдеров, authorize-URL). */
+export async function backendPublicGet<T = unknown>(path: string): Promise<T> {
+  const res = await fetch(`${BACKEND_URL}${path}`, { cache: 'no-store' })
+  return (await parse(res)) as T
+}
+
+export interface BackendUser {
+  id: string
+  email: string | null
+  role: string
+  clientId: string | null
+  companyName: string | null
+}
+
+export interface BackendSession {
+  token: string
+  user: BackendUser
+  created?: boolean
+}
+
+export interface BackendTwoFactorChallenge {
+  twoFactorRequired: true
+  challengeToken: string
+  methods: ('totp' | 'backup_code')[]
+}
+
+export function isTwoFactorChallenge(
+  v: BackendSession | BackendTwoFactorChallenge,
+): v is BackendTwoFactorChallenge {
+  return (v as BackendTwoFactorChallenge)?.twoFactorRequired === true
+}
+
+/** Куда вести пользователя после успешного входа — зависит от роли. */
+export function homeForRole(role: string | undefined | null): string {
+  return role === 'owner' ? '/owner/overview' : '/admin/stats'
 }

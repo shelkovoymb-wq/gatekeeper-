@@ -30,6 +30,29 @@ const schema = z.object({
   OWNER_EMAIL: z.string().email().optional(),
   OWNER_PASSWORD: z.string().min(8).optional(),
 
+  // ─── 2FA (TOTP) ───────────────────────────────────────────────────────────
+  // Issuer виден в приложении-аутентификаторе рядом с кодом.
+  TOTP_ISSUER: z.string().min(1).default('Gatekeeper'),
+  // Время жизни промежуточного токена между «пароль верный» и «код введён».
+  TWO_FACTOR_CHALLENGE_TTL: z.string().default('5m'),
+
+  // ─── OAuth (вход через Google / Яндекс) ───────────────────────────────────
+  // Провайдер включается только когда заданы обе половины пары; иначе
+  // соответствующая кнопка просто не показывается в UI.
+  GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
+  YANDEX_OAUTH_CLIENT_ID: z.string().optional(),
+  YANDEX_OAUTH_CLIENT_SECRET: z.string().optional(),
+  // База для redirect_uri. По умолчанию — кабинет (PUBLIC_APP_URL), т.к.
+  // callback обрабатывает BFF Next.js, а не сам API.
+  OAUTH_REDIRECT_BASE_URL: z.string().url().optional(),
+  // Разрешать ли создавать НОВЫЙ аккаунт при первом входе через провайдера.
+  // false — вход только для тех, кто уже привязал внешний аккаунт в кабинете.
+  OAUTH_ALLOW_SIGNUP: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+
   // ИИ-ассистент настройки. Если ключа нет — ассистент работает в guided-режиме.
   // ANTHROPIC_BASE_URL позволяет направить запросы через совместимый шлюз
   // (Anthropic Messages API), а не напрямую на api.anthropic.com.

@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  Inject,
   Injectable,
   UnauthorizedException,
   createParamDecorator,
@@ -16,7 +17,7 @@ interface RequestLike {
 /** JWT-guard для кабинета клиента (/v1/cabinet/*, /v1/auth/me). */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(private readonly jwt: JwtService) {}
+  constructor(@Inject(JwtService) private readonly jwt: JwtService) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const req = ctx.switchToHttp().getRequest<RequestLike>();
@@ -26,6 +27,12 @@ export class JwtAuthGuard implements CanActivate {
     if (!token) throw new UnauthorizedException('no token');
     try {
       const payload = await this.jwt.verifyAsync<JwtPayload>(token);
+      // Все токены платформы подписаны одним секретом, поэтому назначение
+      // проверяем явно: промежуточный 2FA-токен и OAuth-state не должны
+      // открывать кабинет. Отсутствие `typ` — токен, выпущенный до 2FA.
+      if (payload.typ !== undefined && payload.typ !== 'access') {
+        throw new UnauthorizedException('invalid token');
+      }
       req.auth = {
         userId: payload.sub,
         clientId: payload.cid ?? null,

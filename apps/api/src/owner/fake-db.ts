@@ -25,6 +25,14 @@ export function createFakeDb(): { db: any; fake: FakeDb } {
           const next = results.length > 0 ? results.shift() : [];
           return (resolve: (v: unknown) => void) => resolve(next);
         }
+        // db.transaction(cb) — прогоняем колбэк на том же дубле, чтобы запросы
+        // внутри транзакции попадали в тот же журнал вызовов и очередь ответов.
+        if (prop === 'transaction') {
+          return (cb: (tx: unknown) => unknown) => {
+            calls.push({ method: 'transaction', args: [] });
+            return Promise.resolve(cb(chain));
+          };
+        }
         return (...args: unknown[]) => {
           calls.push({ method: String(prop), args });
           return chain;
