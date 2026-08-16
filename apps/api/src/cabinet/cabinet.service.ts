@@ -20,7 +20,13 @@ import { PlansService, type CreatePlanInput } from '../plans/plans.service.js';
 import { ChannelsService } from '../channels/channels.service.js';
 
 /** Провайдеры, которые клиент может настроить в кабинете. */
-export const PAYMENT_PROVIDERS = ['yookassa', 'cloudpayments', 'robokassa', 'stars'] as const;
+export const PAYMENT_PROVIDERS = [
+  'yookassa',
+  'cloudpayments',
+  'robokassa',
+  'prodamus',
+  'stars',
+] as const;
 export type PaymentProviderId = (typeof PAYMENT_PROVIDERS)[number];
 
 @Injectable()

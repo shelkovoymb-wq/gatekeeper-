@@ -7,15 +7,29 @@ import {
   type PaymentWebhook,
   type WebhookVerifyContext,
 } from '../payment.types.js';
+import { ProviderCredentials } from '../provider-credentials.js';
 
 @Injectable()
 export class CloudPaymentsProvider implements PaymentProviderAdapter {
   private readonly logger = new Logger(CloudPaymentsProvider.name);
   name = 'cloudpayments';
 
+  constructor(private readonly credentials: ProviderCredentials) {}
+
   async initiate(request: PaymentRequest): Promise<{ url: string | null; paymentId: string }> {
-    const publicId = process.env[`CLOUDPAYMENTS_PUBLIC_ID_${request.clientId.toUpperCase()}`];
-    const apiSecret = process.env[`CLOUDPAYMENTS_API_SECRET_${request.clientId.toUpperCase()}`];
+    const creds = await this.credentials.get(request.clientId, 'cloudpayments');
+    const publicId = this.credentials.pick(
+      creds,
+      'publicId',
+      'CLOUDPAYMENTS_PUBLIC_ID',
+      request.clientId,
+    );
+    const apiSecret = this.credentials.pick(
+      creds,
+      'apiSecret',
+      'CLOUDPAYMENTS_API_SECRET',
+      request.clientId,
+    );
     if (!publicId || !apiSecret) {
       throw new BadRequestException(`CloudPayments not configured for client ${request.clientId}`);
     }
@@ -48,13 +62,19 @@ export class CloudPaymentsProvider implements PaymentProviderAdapter {
    * подписи любой мог бы прислать поддельное "Status: 0" и получить доступ
    * бесплатно — поэтому статус принимается только если подпись совпала.
    */
-  verify(ctx: WebhookVerifyContext): Promise<PaymentWebhook> {
+  async verify(ctx: WebhookVerifyContext): Promise<PaymentWebhook> {
     const p = ctx.body as Record<string, string>;
     const clientId = p.AccountId;
     if (!clientId) {
       throw new Error('cloudpayments webhook: missing AccountId');
     }
-    const apiSecret = process.env[`CLOUDPAYMENTS_API_SECRET_${clientId.toUpperCase()}`];
+    const creds = await this.credentials.get(clientId, 'cloudpayments');
+    const apiSecret = this.credentials.pick(
+      creds,
+      'apiSecret',
+      'CLOUDPAYMENTS_API_SECRET',
+      clientId,
+    );
     if (!apiSecret) {
       throw new Error(`CloudPayments not configured for client ${clientId}`);
     }

@@ -7,6 +7,7 @@ import {
   type PaymentWebhook,
   type WebhookVerifyContext,
 } from '../payment.types.js';
+import { ProviderCredentials } from '../provider-credentials.js';
 
 @Injectable()
 export class RobokassaProvider implements PaymentProviderAdapter {
@@ -14,13 +15,26 @@ export class RobokassaProvider implements PaymentProviderAdapter {
   name = 'robokassa';
   private readonly checkoutUrl = 'https://auth.robokassa.ru/Merchant/Index.aspx';
 
+  constructor(private readonly credentials: ProviderCredentials) {}
+
   private md5(str: string): string {
     return crypto.createHash('md5').update(str).digest('hex');
   }
 
   async initiate(request: PaymentRequest): Promise<{ url: string | null; paymentId: string }> {
-    const merchantLogin = process.env[`ROBOKASSA_MERCHANT_LOGIN_${request.clientId.toUpperCase()}`];
-    const password1 = process.env[`ROBOKASSA_PASSWORD1_${request.clientId.toUpperCase()}`];
+    const creds = await this.credentials.get(request.clientId, 'robokassa');
+    const merchantLogin = this.credentials.pick(
+      creds,
+      'merchantLogin',
+      'ROBOKASSA_MERCHANT_LOGIN',
+      request.clientId,
+    );
+    const password1 = this.credentials.pick(
+      creds,
+      'password1',
+      'ROBOKASSA_PASSWORD1',
+      request.clientId,
+    );
     if (!merchantLogin || !password1) {
       throw new BadRequestException(`Robokassa not configured for client ${request.clientId}`);
     }
@@ -55,13 +69,19 @@ export class RobokassaProvider implements PaymentProviderAdapter {
    * SignatureValue = MD5(OutSum:InvId:Password2:Shp_clientId=...).
    * Без сверки подписи любой мог прислать поддельное подтверждение оплаты.
    */
-  verify(ctx: WebhookVerifyContext): Promise<PaymentWebhook> {
+  async verify(ctx: WebhookVerifyContext): Promise<PaymentWebhook> {
     const p = ctx.body as Record<string, string>;
     const clientId = p.Shp_clientId;
     if (!clientId) {
       throw new Error('robokassa webhook: missing Shp_clientId');
     }
-    const password2 = process.env[`ROBOKASSA_PASSWORD2_${clientId.toUpperCase()}`];
+    const creds = await this.credentials.get(clientId, 'robokassa');
+    const password2 = this.credentials.pick(
+      creds,
+      'password2',
+      'ROBOKASSA_PASSWORD2',
+      clientId,
+    );
     if (!password2) {
       throw new Error(`Robokassa result password not configured for client ${clientId}`);
     }

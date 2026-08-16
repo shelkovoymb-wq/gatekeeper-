@@ -7,6 +7,7 @@ import {
   type PaymentWebhook,
   type WebhookVerifyContext,
 } from '../payment.types.js';
+import { ProviderCredentials } from '../provider-credentials.js';
 
 @Injectable()
 export class YooKassaProvider implements PaymentProviderAdapter {
@@ -14,9 +15,17 @@ export class YooKassaProvider implements PaymentProviderAdapter {
   name = 'yookassa';
   private readonly apiUrl = 'https://api.yookassa.ru/v3/payments';
 
+  constructor(private readonly credentials: ProviderCredentials) {}
+
   async initiate(request: PaymentRequest): Promise<{ url: string | null; paymentId: string }> {
-    const shopId = process.env[`YOOKASSA_SHOP_ID_${request.clientId.toUpperCase()}`];
-    const secretKey = process.env[`YOOKASSA_SECRET_${request.clientId.toUpperCase()}`];
+    const creds = await this.credentials.get(request.clientId, 'yookassa');
+    const shopId = this.credentials.pick(creds, 'shopId', 'YOOKASSA_SHOP_ID', request.clientId);
+    const secretKey = this.credentials.pick(
+      creds,
+      'secretKey',
+      'YOOKASSA_SECRET',
+      request.clientId,
+    );
     if (!shopId || !secretKey) {
       throw new BadRequestException(`YooKassa not configured for client ${request.clientId}`);
     }
@@ -79,8 +88,9 @@ export class YooKassaProvider implements PaymentProviderAdapter {
       throw new Error('yookassa webhook: missing object.id or object.metadata.clientId');
     }
 
-    const shopId = process.env[`YOOKASSA_SHOP_ID_${clientId.toUpperCase()}`];
-    const secretKey = process.env[`YOOKASSA_SECRET_${clientId.toUpperCase()}`];
+    const creds = await this.credentials.get(clientId, 'yookassa');
+    const shopId = this.credentials.pick(creds, 'shopId', 'YOOKASSA_SHOP_ID', clientId);
+    const secretKey = this.credentials.pick(creds, 'secretKey', 'YOOKASSA_SECRET', clientId);
     if (!shopId || !secretKey) {
       throw new Error(`YooKassa not configured for client ${clientId}`);
     }

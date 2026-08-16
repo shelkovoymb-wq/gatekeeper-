@@ -7,6 +7,7 @@ import {
   type PaymentWebhook,
   type WebhookVerifyContext,
 } from '../payment.types.js';
+import { ProviderCredentials } from '../provider-credentials.js';
 
 @Injectable()
 export class ProdamusProvider implements PaymentProviderAdapter {
@@ -14,9 +15,17 @@ export class ProdamusProvider implements PaymentProviderAdapter {
   name = 'prodamus';
   private readonly apiUrl = 'https://api.prodamus.ru/v1/payment/create';
 
+  constructor(private readonly credentials: ProviderCredentials) {}
+
   async initiate(request: PaymentRequest): Promise<{ url: string | null; paymentId: string }> {
-    const apiKey = process.env[`PRODAMUS_API_KEY_${request.clientId.toUpperCase()}`];
-    const secretKey = process.env[`PRODAMUS_SECRET_KEY_${request.clientId.toUpperCase()}`];
+    const creds = await this.credentials.get(request.clientId, 'prodamus');
+    const apiKey = this.credentials.pick(creds, 'apiKey', 'PRODAMUS_API_KEY', request.clientId);
+    const secretKey = this.credentials.pick(
+      creds,
+      'secretKey',
+      'PRODAMUS_SECRET_KEY',
+      request.clientId,
+    );
     if (!apiKey || !secretKey) {
       throw new BadRequestException(`Prodamus not configured for client ${request.clientId}`);
     }
@@ -29,7 +38,9 @@ export class ProdamusProvider implements PaymentProviderAdapter {
       description: request.description,
       return_url: `${process.env.PUBLIC_API_URL}/payments/success?provider=prodamus&paymentId=${paymentId}`,
       fail_url: `${process.env.PUBLIC_API_URL}/payments/fail?provider=prodamus&paymentId=${paymentId}`,
-      notification_url: `${process.env.PUBLIC_API_URL}/webhooks/payments/prodamus`,
+      // Наружу проброшен только /payments/webhook/ (см. gatekeeper-proxy),
+      // и контроллер слушает ровно этот путь — @Post('webhook/:provider').
+      notification_url: `${process.env.PUBLIC_API_URL}/payments/webhook/prodamus`,
       metadata: {
         clientId: request.clientId,
         subscriberId: request.subscriberId,
@@ -90,7 +101,8 @@ export class ProdamusProvider implements PaymentProviderAdapter {
       throw new Error('prodamus webhook: missing clientId in metadata');
     }
 
-    const secretKey = process.env[`PRODAMUS_SECRET_KEY_${clientId.toUpperCase()}`];
+    const creds = await this.credentials.get(clientId, 'prodamus');
+    const secretKey = this.credentials.pick(creds, 'secretKey', 'PRODAMUS_SECRET_KEY', clientId);
     if (!secretKey) {
       throw new Error(`Prodamus not configured for client ${clientId}`);
     }
