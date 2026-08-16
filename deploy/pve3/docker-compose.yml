@@ -74,7 +74,9 @@ services:
     environment:
       NODE_ENV: production
       BACKEND_URL: http://api:3000
-      GATEKEEPER_API_TOKEN: ${N8N_SERVICE_TOKEN}
+      # Сервис-токен платформы сюда больше не передаём: BFF ходит в API только
+      # с JWT пользователя из сессионной куки. Держать в web-контейнере токен,
+      # открывающий сервисные ручки, — лишний путь к эскалации.
       # Коды подтверждения сайта для Google Search Console / Яндекс.Вебмастера —
       # задаются в deploy/pve3/.env, не секретны (просто рендерятся в <meta>).
       GOOGLE_SITE_VERIFICATION: ${GOOGLE_SITE_VERIFICATION:-}
