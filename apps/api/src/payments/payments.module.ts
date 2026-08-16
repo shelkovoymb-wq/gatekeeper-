@@ -10,12 +10,14 @@ import { CloudPaymentsProvider } from './providers/cloudpayments.provider.js';
 import { RobokassaProvider } from './providers/robokassa.provider.js';
 import { ProdamusProvider } from './providers/prodamus.provider.js';
 import { DirectTransferProvider } from './providers/direct-transfer.provider.js';
+import { ProviderCredentials } from './provider-credentials.js';
 
 @Module({
   controllers: [PaymentsController, PaymentAccountsController, PaymentConfigController],
   providers: [
     PaymentsService,
     PaymentConfigService,
+    ProviderCredentials,
     TelegramStarsProvider,
     YooKassaProvider,
     CloudPaymentsProvider,

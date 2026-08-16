@@ -93,12 +93,24 @@
 
 Всё делается на LXC 150 (`pct exec 150` с pve3, либо `ssh` внутрь).
 
+Каталог `/opt/gatekeeper-src/gatekeeper` — это git-checkout (до 16.08.2026 код
+заливали тарболлами `gk-src*.tgz`, `.git` там не было). `.env` и
+`deploy/pve3/.env` не в индексе, поэтому `reset --hard` их не трогает.
+
 ```bash
 cd /opt/gatekeeper-src/gatekeeper
 C="docker compose --env-file .env -f deploy/pve3/docker-compose.yml"
 
+# Обновление кода
+git fetch --depth 1 origin main
+git reset --hard FETCH_HEAD
+git log --oneline -1
+
 # Сборка (BuildKit выключен — в лабе TLS-инспекция ломает часть загрузок)
 export DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0
+# web пересобирать обязательно вместе с api, если менялись страницы кабинета
+# или BFF-роуты /api/* — они живут в web, и без его пересборки новые экраны
+# в проде не появятся.
 $C build api web
 
 # Запуск
@@ -136,6 +148,9 @@ curl -s -o /dev/null -w "%{http_code}\n" https://gatekeeper.skud24.ru/admin/stat
 | `502 Bad Gateway` снаружи | web/api контейнер не поднят или упал | `$C ps`, `$C logs web`; проверить `.env` и апстримы в nginx на .44 |
 | BFF `/api/*` отдаёт 401/502 | токен web ≠ токен API | Сверить `GATEKEEPER_API_TOKEN` (web) и `N8N_SERVICE_TOKEN` (api) |
 | apt/сборка виснут на IPv6 | нет IPv6-маршрута в лабе | `Acquire::ForceIPv4=true`, `precedence ::ffff:0:0/96 100` в gai.conf |
+| Сборка встала намертво: лог не растёт, CPU простаивает, образ не тегается | Зависла работа dockerd с образами. Признак: `docker system df` не отвечает по таймауту, процессы compose висят в `futex_do_wait` (`ps -o wchan`), при этом `docker run` на готовом образе ещё работает | `systemctl restart docker` — контейнеры вернутся сами (`restart: unless-stopped`), но сайт на минуту-две уйдёт в 502. Перед этим снять зависшие процессы сборки **по PID** (`pkill -f 'docker compose'` совпадёт с собственной командной строкой SSH и убьёт сессию). Осиротевший build-контейнер в статусе `Created` — `docker rm -f <id>` |
+| `api` в рестарт-лупе после деплоя, в логе PostgresError | Раннер (`dist/db/migrate.js`) применяет миграции по порядку и **останавливается на первой упавшей** — все последующие не применяются, приложение не стартует | `docker logs pve3-api-1` → найти файл. Починить SQL в репозитории; на проде применить исправленный DDL вручную и дописать имя файла в `_migrations`, иначе образ с прежней копией миграций упадёт снова (миграции копируются внутрь образа при сборке) |
+| Эндпоинт есть в коде, но снаружи 404 | Наружу через nginx проброшены только `/healthz`, `/tg/`, `/payments/webhook/` — остальное уходит в Next.js. Это защита, а не баг | Владельческие и клиентские ручки вызываются из браузера через BFF `/api/*`, который ходит в API по внутренней сети. Новый эндпоинт для кабинета → префикс `v1/...` + BFF-роут в `apps/web/src/app/api/` |
 
 ---
 

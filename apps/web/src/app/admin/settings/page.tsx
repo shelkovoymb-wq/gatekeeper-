@@ -38,6 +38,13 @@ const providerMeta: Record<string, { label: string; fields: { key: string; label
       { key: 'password2', label: 'Пароль #2' },
     ],
   },
+  prodamus: {
+    label: 'Prodamus',
+    fields: [
+      { key: 'apiKey', label: 'API-ключ' },
+      { key: 'secretKey', label: 'Секретный ключ' },
+    ],
+  },
   stars: { label: 'Telegram Stars', fields: [] },
 }
 
