@@ -85,6 +85,7 @@
 | `N8N_SERVICE_TOKEN`   | Сервис-токен `ServiceTokenGuard` (вызовы из n8n) |
 | `TELEGRAM_*`          | Токены/секреты ботов                        |
 | `YOOKASSA_*`, `CLOUDPAYMENTS_*`, `ROBOKASSA_*` | Ключи провайдеров          |
+| `DIRECT_WEBHOOK_SECRET` | Секрет подписи подтверждений прямых переводов |
 | `N8N_WEBHOOK_URL`     | Куда API шлёт события outbox                 |
 
 > web-сервису сервис-токен не нужен и не передаётся. Если в `.env` на проде
