@@ -139,8 +139,26 @@ export class CabinetService {
     if (ch.clientId !== clientId) throw new ForbiddenException('нет доступа к каналу');
   }
 
+  /**
+   * Тариф тоже должен принадлежать вызывающему: его id уходит в имя
+   * пригласительной ссылки (`plan:<id>`) и в invite_links.plan_id, то есть
+   * подписчик, пришедший по ссылке, будет посажен на этот тариф. Без проверки
+   * клиент мог бы привязать к своему каналу чужой тариф — с чужой ценой и
+   * длительностью.
+   */
+  private async assertPlanOwner(clientId: string, planId: string) {
+    const [p] = await this.db
+      .select({ clientId: plans.clientId })
+      .from(plans)
+      .where(eq(plans.id, planId))
+      .limit(1);
+    if (!p) throw new NotFoundException('тариф не найден');
+    if (p.clientId !== clientId) throw new ForbiddenException('нет доступа к тарифу');
+  }
+
   async createInviteLink(clientId: string, channelId: string, planId?: string) {
     await this.assertChannelOwner(clientId, channelId);
+    if (planId) await this.assertPlanOwner(clientId, planId);
     const url = await this.channelsSvc.createInviteLink(channelId, planId);
     return { url };
   }
