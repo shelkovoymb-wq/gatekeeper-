@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CabinetService } from './cabinet.service.js';
 import { createFakeDb, type FakeDb } from '../owner/fake-db.js';
 
@@ -17,11 +17,15 @@ describe('CabinetService — изоляция арендаторов', () => {
   let service: CabinetService;
   let fake: FakeDb;
   let channelsSvc: { createInviteLink: ReturnType<typeof vi.fn> };
+  let paymentsSvc: { refundPayment: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     const created = createFakeDb();
     fake = created.fake;
     channelsSvc = { createInviteLink: vi.fn().mockResolvedValue('https://t.me/+link') };
+    paymentsSvc = {
+      refundPayment: vi.fn().mockResolvedValue({ id: 'p1', status: 'refunded' }),
+    };
 
     service = new CabinetService(
       created.db,
@@ -29,6 +33,7 @@ describe('CabinetService — изоляция арендаторов', () => {
       {} as never, // BotsService
       {} as never, // PlansService
       channelsSvc as never,
+      paymentsSvc as never,
     );
   });
 
@@ -125,6 +130,7 @@ describe('CabinetService — изоляция арендаторов', () => {
           {} as never,
           {} as never,
           channelsSvc as never,
+          paymentsSvc as never,
         );
         created.fake.queue([], []);
 
@@ -143,6 +149,7 @@ describe('CabinetService — изоляция арендаторов', () => {
         {} as never,
         {} as never,
         channelsSvc as never,
+        paymentsSvc as never,
       );
       created.fake.queue([], []);
 
@@ -165,6 +172,7 @@ describe('CabinetService — изоляция арендаторов', () => {
         {} as never,
         {} as never,
         channelsSvc as never,
+        paymentsSvc as never,
       );
       created.fake.queue([], []);
 
@@ -173,6 +181,55 @@ describe('CabinetService — изоляция арендаторов', () => {
       expect(box.encrypt).not.toHaveBeenCalled();
       const [values] = created.fake.argsOf('values') as [Record<string, unknown>];
       expect(values.credentialsEnc).toBeNull();
+    });
+  });
+
+  describe('refundPayment', () => {
+    it('возвращает свой платёж', async () => {
+      fake.queue([{ amount: '1000.00' }]);
+
+      await expect(service.refundPayment(CLIENT_A, 'pay_1')).resolves.toEqual({
+        id: 'p1',
+        status: 'refunded',
+      });
+      expect(paymentsSvc.refundPayment).toHaveBeenCalledWith('pay_1', undefined, undefined);
+    });
+
+    it('не возвращает чужой платёж', async () => {
+      // Запрос идёт с фильтром по clientId, поэтому чужой платёж просто не
+      // находится — наружу это 404, без подсказки о существовании платежа.
+      fake.queue([]);
+
+      await expect(service.refundPayment(CLIENT_A, 'чужой-платёж')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(paymentsSvc.refundPayment).not.toHaveBeenCalled();
+    });
+
+    it('отвергает сумму больше суммы платежа', async () => {
+      fake.queue([{ amount: '1000.00' }]);
+
+      await expect(service.refundPayment(CLIENT_A, 'pay_1', 5000)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(paymentsSvc.refundPayment).not.toHaveBeenCalled();
+    });
+
+    it.each([0, -100, Number.NaN])('отвергает сумму %s', async (amount) => {
+      fake.queue([{ amount: '1000.00' }]);
+
+      await expect(service.refundPayment(CLIENT_A, 'pay_1', amount)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(paymentsSvc.refundPayment).not.toHaveBeenCalled();
+    });
+
+    it('пропускает частичный возврат в пределах суммы', async () => {
+      fake.queue([{ amount: '1000.00' }]);
+
+      await service.refundPayment(CLIENT_A, 'pay_1', 250, 'по просьбе клиента');
+
+      expect(paymentsSvc.refundPayment).toHaveBeenCalledWith('pay_1', 250, 'по просьбе клиента');
     });
   });
 

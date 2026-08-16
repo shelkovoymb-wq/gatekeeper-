@@ -1,4 +1,10 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 import { DB, type Database } from '../db/db.module.js';
 import { SECRET_BOX } from '../common/crypto.module.js';
@@ -18,6 +24,7 @@ import {
 import { BotsService } from '../bots/bots.service.js';
 import { PlansService, type CreatePlanInput } from '../plans/plans.service.js';
 import { ChannelsService } from '../channels/channels.service.js';
+import { PaymentsService } from '../payments/payments.service.js';
 
 /** Провайдеры, которые клиент может настроить в кабинете. */
 export const PAYMENT_PROVIDERS = [
@@ -37,6 +44,7 @@ export class CabinetService {
     private readonly botsSvc: BotsService,
     private readonly plansSvc: PlansService,
     private readonly channelsSvc: ChannelsService,
+    private readonly paymentsSvc: PaymentsService,
   ) {}
 
   async overview(clientId: string) {
@@ -209,6 +217,45 @@ export class CabinetService {
       updatedAt: p.updatedAt?.toISOString?.() ?? undefined,
       metadata: (p.metadata as Record<string, unknown>) ?? {},
     }));
+  }
+
+  /**
+   * Возврат платежа по инициативе клиента.
+   *
+   * Идентификатор здесь — `provider_payment_id` (именно так платёж ищет
+   * PaymentsService), поэтому и владельца проверяем по нему. Раньше возврат
+   * жил только на сервис-токенной ручке `/payments/:id/refund`, а BFF-роут
+   * ходил туда общим токеном платформы вообще без сессии — то есть любой
+   * запрос из интернета мог вернуть чужой платёж.
+   */
+  async refundPayment(
+    clientId: string,
+    providerPaymentId: string,
+    amount?: number,
+    reason?: string,
+  ) {
+    const [row] = await this.db
+      .select({ amount: payments.amount })
+      .from(payments)
+      .where(
+        and(
+          eq(payments.providerPaymentId, providerPaymentId),
+          eq(payments.clientId, clientId),
+        ),
+      )
+      .limit(1);
+    if (!row) throw new NotFoundException('платёж не найден');
+
+    if (amount !== undefined) {
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new BadRequestException('сумма возврата должна быть положительной');
+      }
+      if (amount > Number(row.amount)) {
+        throw new BadRequestException('сумма возврата больше суммы платежа');
+      }
+    }
+
+    return this.paymentsSvc.refundPayment(providerPaymentId, amount, reason);
   }
 
   async listPlans(clientId: string) {

@@ -61,8 +61,11 @@
 ### Web (`apps/web`, Next.js 15 + React 19, порт 3001→3000)
 - Админ-панель на `/admin/{stats,channels,users,payments}`, тёмная тема.
 - **BFF-паттерн**: route handlers `apps/web/src/app/api/*` на сервере ходят в API
-  (`BACKEND_URL=http://api:3000`) с `Authorization: Bearer $GATEKEEPER_API_TOKEN`.
-  Токен из браузера не виден — только сервер-сайд.
+  (`BACKEND_URL=http://api:3000`) с **JWT пользователя** из httpOnly-куки
+  `gk_session` (`apps/web/src/lib/cabinet.ts`). Токен из браузера не виден —
+  только сервер-сайд. Сервис-токена платформы в web-контейнере нет: BFF не
+  должен уметь больше, чем залогиненный пользователь, иначе любой роут,
+  забывший проверить сессию, становится путём к чужим данным.
 - Никаких моков: все данные из реальной БД через API.
 
 ### Данные
@@ -79,13 +82,13 @@
 | Переменная            | Назначение                                  |
 |-----------------------|---------------------------------------------|
 | `POSTGRES_PASSWORD`   | Пароль БД                                   |
-| `N8N_SERVICE_TOKEN`   | Сервис-токен: API-guard **и** токен BFF web |
+| `N8N_SERVICE_TOKEN`   | Сервис-токен `ServiceTokenGuard` (вызовы из n8n) |
 | `TELEGRAM_*`          | Токены/секреты ботов                        |
 | `YOOKASSA_*`, `CLOUDPAYMENTS_*`, `ROBOKASSA_*` | Ключи провайдеров          |
 | `N8N_WEBHOOK_URL`     | Куда API шлёт события outbox                 |
 
-> web-сервис получает `GATEKEEPER_API_TOKEN: ${N8N_SERVICE_TOKEN}` из того же
-> `.env` — токены должны совпадать, иначе BFF получит 401 от API.
+> web-сервису сервис-токен не нужен и не передаётся. Если в `.env` на проде
+> остался `GATEKEEPER_API_TOKEN` — он больше ни на что не влияет.
 
 ---
 
@@ -146,7 +149,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://gatekeeper.skud24.ru/admin/stat
 | `next build` виснет в `pnpm install` на несколько минут | Playwright (devDep) тянет браузеры через TLS-инспекцию | В Dockerfile web стоит `ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` |
 | `COPY /app/apps/web/public: file does not exist` | нет каталога `public` | В builder-стадии `RUN mkdir -p public && pnpm build`; в репо есть `public/.gitkeep` |
 | `502 Bad Gateway` снаружи | web/api контейнер не поднят или упал | `$C ps`, `$C logs web`; проверить `.env` и апстримы в nginx на .44 |
-| BFF `/api/*` отдаёт 401/502 | токен web ≠ токен API | Сверить `GATEKEEPER_API_TOKEN` (web) и `N8N_SERVICE_TOKEN` (api) |
+| BFF `/api/*` отдаёт 401 | нет или протухла сессионная кука `gk_session` (JWT живёт 7 дней) | Перелогиниться. 401 здесь — штатный ответ, а не поломка конфигурации: BFF пробрасывает JWT пользователя, своего токена у него нет |
 | apt/сборка виснут на IPv6 | нет IPv6-маршрута в лабе | `Acquire::ForceIPv4=true`, `precedence ::ffff:0:0/96 100` в gai.conf |
 | Сборка встала намертво: лог не растёт, CPU простаивает, образ не тегается | Зависла работа dockerd с образами. Признак: `docker system df` не отвечает по таймауту, процессы compose висят в `futex_do_wait` (`ps -o wchan`), при этом `docker run` на готовом образе ещё работает | `systemctl restart docker` — контейнеры вернутся сами (`restart: unless-stopped`), но сайт на минуту-две уйдёт в 502. Перед этим снять зависшие процессы сборки **по PID** (`pkill -f 'docker compose'` совпадёт с собственной командной строкой SSH и убьёт сессию). Осиротевший build-контейнер в статусе `Created` — `docker rm -f <id>` |
 | `api` в рестарт-лупе после деплоя, в логе PostgresError | Раннер (`dist/db/migrate.js`) применяет миграции по порядку и **останавливается на первой упавшей** — все последующие не применяются, приложение не стартует | `docker logs pve3-api-1` → найти файл. Починить SQL в репозитории; на проде применить исправленный DDL вручную и дописать имя файла в `_migrations`, иначе образ с прежней копией миграций упадёт снова (миграции копируются внутрь образа при сборке) |
