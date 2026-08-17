@@ -1,6 +1,6 @@
 import { Injectable, Logger, BadRequestException, Inject } from '@nestjs/common';
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import {
   PaymentStatus,
   type PaymentProviderAdapter,
@@ -29,25 +29,30 @@ export class DirectTransferProvider implements PaymentProviderAdapter {
    * или вебхука от банка.
    */
   async initiate(request: PaymentRequest): Promise<{ url: string | null; paymentId: string }> {
-    // Получаем реквизиты получателя (владельца платного контента)
+    // Реквизиты получателя (клиента, который продаёт доступ). Фильтр по
+    // is_active и verified стоит прямо в запросе: клиент может завести
+    // несколько счетов, и без него сюда попадала бы произвольная строка —
+    // например давно отключённая карта.
+    const payeeClientId = request.metadata?.payeeClientId as string | undefined;
+    if (!payeeClientId) {
+      throw new BadRequestException('metadata.payeeClientId is required for direct transfer');
+    }
+
     const [account] = await this.db
       .select()
       .from(directPaymentAccounts)
       .where(
-        eq(directPaymentAccounts.clientId, request.metadata?.payeeClientId as string),
+        and(
+          eq(directPaymentAccounts.clientId, payeeClientId),
+          eq(directPaymentAccounts.isActive, true),
+          eq(directPaymentAccounts.verificationStatus, 'verified'),
+        ),
       )
       .limit(1);
 
-    if (!account || !account.isActive) {
+    if (!account) {
       throw new BadRequestException(
-        `Direct payment account not configured or inactive for payee`,
-      );
-    }
-
-    // Проверяем статус верификации
-    if (account.verificationStatus !== 'verified') {
-      throw new BadRequestException(
-        `Direct payment account is not verified (status: ${account.verificationStatus})`,
+        'Direct payment account not configured, inactive or not verified for payee',
       );
     }
 
@@ -76,6 +81,10 @@ export class DirectTransferProvider implements PaymentProviderAdapter {
       }),
       ...(account.accountType === 'paypal' && {
         email: account.email,
+      }),
+      ...(account.accountType === 'crypto' && {
+        cryptoAddress: account.cryptoAddress,
+        cryptoType: account.cryptoType,
       }),
       description: request.description,
       orderId: paymentId,
