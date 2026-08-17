@@ -96,6 +96,21 @@ export class CabinetController {
     return this.cabinet.refundPayment(clientIdOf(auth), paymentId, dto?.amount, dto?.reason);
   }
 
+  @Get('payment-accounts')
+  listPaymentAccounts(@Auth() auth: AuthContext) {
+    return this.cabinet.listPaymentAccounts(clientIdOf(auth));
+  }
+
+  @Post('payment-accounts')
+  addPaymentAccount(@Auth() auth: AuthContext, @Body() dto: Record<string, unknown>) {
+    return this.cabinet.addPaymentAccount(clientIdOf(auth), dto ?? {});
+  }
+
+  @Delete('payment-accounts/:id')
+  deactivatePaymentAccount(@Auth() auth: AuthContext, @Param('id') id: string) {
+    return this.cabinet.deactivatePaymentAccount(clientIdOf(auth), id);
+  }
+
   @Get('plans')
   listPlans(@Auth() auth: AuthContext) {
     return this.cabinet.listPlans(clientIdOf(auth));

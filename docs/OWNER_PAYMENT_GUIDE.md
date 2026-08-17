@@ -42,6 +42,15 @@ nginx на traefik-ha пробрасывает в API **только** `/healthz
 Контроллер живёт под префиксом `v1/platform` — как `PlatformController`, а не под
 собственным `/owner`, который был бы недостижим из браузера.
 
+> **У клиентов платформы теперь то же самое.** Кабинет клиента → «Мои реквизиты»
+> (`/admin/payment-accounts`), API `/api/payment-accounts` → `/v1/cabinet/payment-accounts`.
+> Набор типов и имена полей совпадают с владельческими, разница в двух вещах:
+> реквизиты клиента лежат в `direct_payment_accounts` (туда же смотрит
+> `DirectTransferProvider`, когда формирует инструкцию по оплате), и клиент **не
+> может подтвердить себя сам** — `verification_status` ставится в `pending`, а
+> `verified` выдаёт платформа через `POST /payment-accounts/:id/verify`
+> (`ServiceTokenGuard`). Активный счёт каждого типа — один: новый гасит прежний.
+
 ## Типы реквизитов
 
 | Тип | Поля | Что хранится |
