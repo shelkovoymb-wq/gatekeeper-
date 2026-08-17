@@ -1,4 +1,10 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 import { DB, type Database } from '../db/db.module.js';
 import { SECRET_BOX } from '../common/crypto.module.js';
@@ -7,6 +13,7 @@ import {
   bots,
   channels,
   clients,
+  directPaymentAccounts,
   paymentConfigs,
   payments,
   planChannels,
@@ -18,6 +25,7 @@ import {
 import { BotsService } from '../bots/bots.service.js';
 import { PlansService, type CreatePlanInput } from '../plans/plans.service.js';
 import { ChannelsService } from '../channels/channels.service.js';
+import { PaymentsService } from '../payments/payments.service.js';
 
 /** Провайдеры, которые клиент может настроить в кабинете. */
 export const PAYMENT_PROVIDERS = [
@@ -29,6 +37,10 @@ export const PAYMENT_PROVIDERS = [
 ] as const;
 export type PaymentProviderId = (typeof PAYMENT_PROVIDERS)[number];
 
+/** Типы реквизитов, которые клиент может завести в кабинете — те же, что у владельца. */
+export const CLIENT_ACCOUNT_TYPES = ['bank_account', 'card', 'sbp', 'paypal', 'crypto'] as const;
+export const CRYPTO_TYPES = ['btc', 'eth', 'usdt'] as const;
+
 @Injectable()
 export class CabinetService {
   constructor(
@@ -37,6 +49,7 @@ export class CabinetService {
     private readonly botsSvc: BotsService,
     private readonly plansSvc: PlansService,
     private readonly channelsSvc: ChannelsService,
+    private readonly paymentsSvc: PaymentsService,
   ) {}
 
   async overview(clientId: string) {
@@ -139,8 +152,26 @@ export class CabinetService {
     if (ch.clientId !== clientId) throw new ForbiddenException('нет доступа к каналу');
   }
 
+  /**
+   * Тариф тоже должен принадлежать вызывающему: его id уходит в имя
+   * пригласительной ссылки (`plan:<id>`) и в invite_links.plan_id, то есть
+   * подписчик, пришедший по ссылке, будет посажен на этот тариф. Без проверки
+   * клиент мог бы привязать к своему каналу чужой тариф — с чужой ценой и
+   * длительностью.
+   */
+  private async assertPlanOwner(clientId: string, planId: string) {
+    const [p] = await this.db
+      .select({ clientId: plans.clientId })
+      .from(plans)
+      .where(eq(plans.id, planId))
+      .limit(1);
+    if (!p) throw new NotFoundException('тариф не найден');
+    if (p.clientId !== clientId) throw new ForbiddenException('нет доступа к тарифу');
+  }
+
   async createInviteLink(clientId: string, channelId: string, planId?: string) {
     await this.assertChannelOwner(clientId, channelId);
+    if (planId) await this.assertPlanOwner(clientId, planId);
     const url = await this.channelsSvc.createInviteLink(channelId, planId);
     return { url };
   }
@@ -191,6 +222,45 @@ export class CabinetService {
       updatedAt: p.updatedAt?.toISOString?.() ?? undefined,
       metadata: (p.metadata as Record<string, unknown>) ?? {},
     }));
+  }
+
+  /**
+   * Возврат платежа по инициативе клиента.
+   *
+   * Идентификатор здесь — `provider_payment_id` (именно так платёж ищет
+   * PaymentsService), поэтому и владельца проверяем по нему. Раньше возврат
+   * жил только на сервис-токенной ручке `/payments/:id/refund`, а BFF-роут
+   * ходил туда общим токеном платформы вообще без сессии — то есть любой
+   * запрос из интернета мог вернуть чужой платёж.
+   */
+  async refundPayment(
+    clientId: string,
+    providerPaymentId: string,
+    amount?: number,
+    reason?: string,
+  ) {
+    const [row] = await this.db
+      .select({ amount: payments.amount })
+      .from(payments)
+      .where(
+        and(
+          eq(payments.providerPaymentId, providerPaymentId),
+          eq(payments.clientId, clientId),
+        ),
+      )
+      .limit(1);
+    if (!row) throw new NotFoundException('платёж не найден');
+
+    if (amount !== undefined) {
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new BadRequestException('сумма возврата должна быть положительной');
+      }
+      if (amount > Number(row.amount)) {
+        throw new BadRequestException('сумма возврата больше суммы платежа');
+      }
+    }
+
+    return this.paymentsSvc.refundPayment(providerPaymentId, amount, reason);
   }
 
   async listPlans(clientId: string) {
@@ -373,5 +443,142 @@ export class CabinetService {
         .values({ clientId, provider, credentialsEnc, isActive });
     }
     return { ok: true };
+  }
+
+  // ─── Реквизиты клиента для получения прямых переводов ──────────────────────
+
+  /**
+   * Наружу реквизиты клиента выглядят ровно как владельческие
+   * (`/v1/platform/payment-accounts`) — те же имена полей, тот же набор типов.
+   * В базе колонки исторически названы иначе (`email`, `phone_for_sbp`,
+   * `card_number_masked`), поэтому здесь живёт маппинг: контракт один, а
+   * плодить дубли колонок ради него незачем.
+   */
+  private mapAccount(a: typeof directPaymentAccounts.$inferSelect) {
+    return {
+      id: a.id,
+      accountType: a.accountType,
+      bankName: a.bankName,
+      accountNumber: a.accountNumber ? `****${a.accountNumber.slice(-4)}` : null,
+      bic: a.bic,
+      inn: a.inn,
+      phoneSbp: a.phoneForSbp,
+      paypalEmail: a.email,
+      cryptoAddress: a.cryptoAddress,
+      cryptoType: a.cryptoType,
+      cardLast4: a.cardNumberMasked ? a.cardNumberMasked.slice(-4) : null,
+      cardHolder: a.cardHolder,
+      isActive: a.isActive,
+      verificationStatus: a.verificationStatus,
+      verifiedAt: a.verifiedAt,
+      createdAt: a.createdAt,
+    };
+  }
+
+  async listPaymentAccounts(clientId: string) {
+    const rows = await this.db
+      .select()
+      .from(directPaymentAccounts)
+      .where(eq(directPaymentAccounts.clientId, clientId))
+      .orderBy(sql`${directPaymentAccounts.createdAt} desc`);
+    return rows.map((a) => this.mapAccount(a));
+  }
+
+  async addPaymentAccount(clientId: string, input: Record<string, unknown>) {
+    const accountType = String(input.accountType ?? '');
+    if (!(CLIENT_ACCOUNT_TYPES as readonly string[]).includes(accountType)) {
+      throw new BadRequestException(
+        `accountType должен быть одним из: ${CLIENT_ACCOUNT_TYPES.join(', ')}`,
+      );
+    }
+
+    const str = (k: string): string | undefined => {
+      const v = input[k];
+      if (v === null || v === undefined) return undefined;
+      const s = String(v).trim();
+      return s === '' ? undefined : s;
+    };
+
+    const values: typeof directPaymentAccounts.$inferInsert = {
+      clientId,
+      accountType,
+      isActive: true,
+      // Подтверждает реквизиты платформа, а не сам клиент: verified здесь —
+      // разрешение принимать деньги, выдавать его себе самому нельзя.
+      verificationStatus: 'pending',
+    };
+
+    switch (accountType) {
+      case 'bank_account': {
+        const bankName = str('bankName');
+        const accountNumber = str('accountNumber');
+        if (!bankName || !accountNumber) {
+          throw new BadRequestException('для банковского счёта нужны bankName и accountNumber');
+        }
+        Object.assign(values, { bankName, accountNumber, bic: str('bic'), inn: str('inn') });
+        break;
+      }
+      case 'card': {
+        const last4 = str('cardLast4');
+        if (!last4 || !/^\d{4}$/.test(last4)) {
+          throw new BadRequestException('cardLast4 — ровно 4 цифры, полный номер карты не принимаем');
+        }
+        Object.assign(values, { cardNumberMasked: `****${last4}`, cardHolder: str('cardHolder') });
+        break;
+      }
+      case 'sbp': {
+        const phone = str('phoneSbp');
+        if (!phone) throw new BadRequestException('для СБП нужен phoneSbp');
+        Object.assign(values, { phoneForSbp: phone, phoneNumber: phone });
+        break;
+      }
+      case 'paypal': {
+        const email = str('paypalEmail');
+        if (!email) throw new BadRequestException('для PayPal нужен paypalEmail');
+        Object.assign(values, { email });
+        break;
+      }
+      case 'crypto': {
+        const address = str('cryptoAddress');
+        const type = str('cryptoType')?.toLowerCase();
+        if (!address) throw new BadRequestException('для криптовалюты нужен cryptoAddress');
+        if (!type || !(CRYPTO_TYPES as readonly string[]).includes(type)) {
+          throw new BadRequestException(`cryptoType должен быть одним из: ${CRYPTO_TYPES.join(', ')}`);
+        }
+        Object.assign(values, { cryptoAddress: address, cryptoType: type });
+        break;
+      }
+    }
+
+    // Активный счёт каждого типа — один: прямой перевод выбирает реквизиты
+    // получателя сам, и при двух активных выбор был бы произвольным.
+    await this.db
+      .update(directPaymentAccounts)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(
+        and(
+          eq(directPaymentAccounts.clientId, clientId),
+          eq(directPaymentAccounts.accountType, accountType),
+        ),
+      );
+
+    const [created] = await this.db.insert(directPaymentAccounts).values(values).returning();
+    return this.mapAccount(created);
+  }
+
+  async deactivatePaymentAccount(clientId: string, accountId: string) {
+    const [updated] = await this.db
+      .update(directPaymentAccounts)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(
+        and(
+          eq(directPaymentAccounts.id, accountId),
+          eq(directPaymentAccounts.clientId, clientId),
+        ),
+      )
+      .returning();
+
+    if (!updated) throw new NotFoundException('реквизиты не найдены');
+    return this.mapAccount(updated);
   }
 }

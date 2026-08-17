@@ -33,6 +33,10 @@ interface CreatePlanDto {
   graceDays?: number;
   channelIds?: string[];
 }
+interface RefundDto {
+  amount?: number;
+  reason?: string;
+}
 interface SetPaymentDto {
   credentials?: Record<string, unknown> | null;
   isActive?: boolean;
@@ -81,6 +85,30 @@ export class CabinetController {
   @Get('transactions')
   listTransactions(@Auth() auth: AuthContext) {
     return this.cabinet.listPaymentTransactions(clientIdOf(auth));
+  }
+
+  @Post('transactions/:paymentId/refund')
+  refund(
+    @Auth() auth: AuthContext,
+    @Param('paymentId') paymentId: string,
+    @Body() dto: RefundDto,
+  ) {
+    return this.cabinet.refundPayment(clientIdOf(auth), paymentId, dto?.amount, dto?.reason);
+  }
+
+  @Get('payment-accounts')
+  listPaymentAccounts(@Auth() auth: AuthContext) {
+    return this.cabinet.listPaymentAccounts(clientIdOf(auth));
+  }
+
+  @Post('payment-accounts')
+  addPaymentAccount(@Auth() auth: AuthContext, @Body() dto: Record<string, unknown>) {
+    return this.cabinet.addPaymentAccount(clientIdOf(auth), dto ?? {});
+  }
+
+  @Delete('payment-accounts/:id')
+  deactivatePaymentAccount(@Auth() auth: AuthContext, @Param('id') id: string) {
+    return this.cabinet.deactivatePaymentAccount(clientIdOf(auth), id);
   }
 
   @Get('plans')

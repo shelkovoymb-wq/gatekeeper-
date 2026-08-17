@@ -1,5 +1,6 @@
 import { Injectable, Logger, BadRequestException, Inject } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import { and, eq } from 'drizzle-orm';
 import {
   PaymentStatus,
   type PaymentProviderAdapter,
@@ -28,29 +29,36 @@ export class DirectTransferProvider implements PaymentProviderAdapter {
    * или вебхука от банка.
    */
   async initiate(request: PaymentRequest): Promise<{ url: string | null; paymentId: string }> {
-    // Получаем реквизиты получателя (владельца платного контента)
+    // Реквизиты получателя (клиента, который продаёт доступ). Фильтр по
+    // is_active и verified стоит прямо в запросе: клиент может завести
+    // несколько счетов, и без него сюда попадала бы произвольная строка —
+    // например давно отключённая карта.
+    const payeeClientId = request.metadata?.payeeClientId as string | undefined;
+    if (!payeeClientId) {
+      throw new BadRequestException('metadata.payeeClientId is required for direct transfer');
+    }
+
     const [account] = await this.db
       .select()
       .from(directPaymentAccounts)
       .where(
-        eq(directPaymentAccounts.clientId, request.metadata?.payeeClientId as string),
+        and(
+          eq(directPaymentAccounts.clientId, payeeClientId),
+          eq(directPaymentAccounts.isActive, true),
+          eq(directPaymentAccounts.verificationStatus, 'verified'),
+        ),
       )
       .limit(1);
 
-    if (!account || !account.isActive) {
+    if (!account) {
       throw new BadRequestException(
-        `Direct payment account not configured or inactive for payee`,
+        'Direct payment account not configured, inactive or not verified for payee',
       );
     }
 
-    // Проверяем статус верификации
-    if (account.verificationStatus !== 'verified') {
-      throw new BadRequestException(
-        `Direct payment account is not verified (status: ${account.verificationStatus})`,
-      );
-    }
-
-    const paymentId = `dir_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    // randomUUID, а не Math.random: этот id — единственное, что отличает один
+    // прямой платёж от другого в подтверждении, и он уезжает плательщику.
+    const paymentId = `dir_${randomUUID()}`;
 
     // Формируем инструкцию для платежа (не отправляем ссылку, т.к. платёж вне платформы)
     const paymentInstruction = {
@@ -74,6 +82,10 @@ export class DirectTransferProvider implements PaymentProviderAdapter {
       ...(account.accountType === 'paypal' && {
         email: account.email,
       }),
+      ...(account.accountType === 'crypto' && {
+        cryptoAddress: account.cryptoAddress,
+        cryptoType: account.cryptoType,
+      }),
       description: request.description,
       orderId: paymentId,
     };
@@ -89,14 +101,39 @@ export class DirectTransferProvider implements PaymentProviderAdapter {
   }
 
   /**
-   * Проверяет вебхук от банка (или manual confirmation).
-   * Может быть использован для:
-   * 1. Автоматического подтверждения через API банка
-   * 2. Ручного подтверждения администратором
-   * 3. Callback от платёжного шлюза, интегрированного с платформой
+   * Подтверждение прямого перевода: вебхук от банка либо ручное подтверждение
+   * оператором, проброшенное сюда же.
+   *
+   * Подпись обязательна. `/payments/webhook/` — единственный путь API, который
+   * nginx отдаёт в интернет (см. gatekeeper-proxy/nginx.conf), а успешный
+   * вебхук переводит платёж в `succeeded`, то есть открывает подписчику доступ.
+   * Без проверки подписи это было бесплатное подтверждение любого платежа:
+   * плательщик знает свой payment_id из инструкции по оплате.
+   *
+   * Секрет — `DIRECT_WEBHOOK_SECRET` в окружении API. Не задан — подтверждения
+   * не принимаются вовсе: молча пропускать неподписанные подтверждения хуже,
+   * чем не принимать их.
    */
   async verify(ctx: WebhookVerifyContext): Promise<PaymentWebhook> {
     const body = ctx.body as Record<string, unknown>;
+
+    const secret = process.env.DIRECT_WEBHOOK_SECRET;
+    if (!secret) {
+      throw new Error('direct transfer webhook: DIRECT_WEBHOOK_SECRET is not configured');
+    }
+
+    const headerSig = ctx.headers['x-gatekeeper-signature'];
+    const providedSig = Array.isArray(headerSig) ? headerSig[0] : headerSig;
+    if (!ctx.rawBody || !providedSig) {
+      throw new Error('direct transfer webhook: missing signature or raw body');
+    }
+
+    const expected = createHmac('sha256', secret).update(ctx.rawBody).digest('hex');
+    const a = Buffer.from(providedSig);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      throw new Error('direct transfer webhook: signature mismatch');
+    }
 
     const paymentId = body.payment_id as string | undefined;
     const orderId = body.order_id as string | undefined;
