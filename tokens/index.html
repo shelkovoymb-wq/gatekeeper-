@@ -53,6 +53,7 @@ h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
 }
 .periods button:hover{color:var(--text-primary);background:var(--surface-2)}
 .periods button[aria-pressed="true"]{background:var(--s1);color:#fff}
+.periods:empty{display:none}   /* до загрузки данных кнопок ещё нет */
 
 .disclaimer{
   margin:18px 0 22px;padding:11px 14px;border:1px solid var(--line);
@@ -159,11 +160,7 @@ footer b{color:var(--text-secondary);font-weight:500}
       <h1>Расход токенов Claude Code</h1>
       <div class="sub" id="generated">загружаю data/tokens.json…</div>
     </div>
-    <div class="periods" role="group" aria-label="Период">
-      <button type="button" data-period="1" aria-pressed="false">1 день</button>
-      <button type="button" data-period="7" aria-pressed="false">7 дней</button>
-      <button type="button" data-period="30" aria-pressed="true">30 дней</button>
-    </div>
+    <div class="periods" id="periods" role="group" aria-label="Период"></div>
   </div>
 
   <div class="disclaimer" id="disclaimer">
@@ -295,7 +292,7 @@ function tipRow(k, v, dim){
 
 // ---------- состояние ----------
 let DATA = null;
-let PERIOD = "30";
+let PERIOD = "30";   // перезаписывается из DATA.periods при загрузке
 const expanded = new Set();
 
 fetch("data/tokens.json", {cache:"no-store"})
@@ -316,20 +313,35 @@ function boot(){
     "собрано " + new Date(DATA.generated_at).toLocaleString("ru-RU", {dateStyle:"medium", timeStyle:"short"}) +
     " · история с " + (DATA.meta.history_from ? dayLabel(DATA.meta.history_from) : "—");
 
-  document.querySelectorAll(".periods button").forEach(btn => {
+  // Кнопки строятся из DATA.periods: добавить период — правка только в Python.
+  const box = document.getElementById("periods");
+  PERIOD = DATA.periods[DATA.periods.length - 1];
+  for (const period of DATA.periods){
+    const btn = el("button","",periodTitle(period));
+    btn.type = "button";
+    btn.dataset.period = period;
+    btn.setAttribute("aria-pressed", String(period === PERIOD));
     btn.addEventListener("click", () => {
-      PERIOD = btn.dataset.period;
-      document.querySelectorAll(".periods button").forEach(b =>
+      PERIOD = period;
+      box.querySelectorAll("button").forEach(b =>
         b.setAttribute("aria-pressed", String(b === btn)));
       render();   // чисто клиентский переключатель, повторных запросов нет
     });
-  });
+    box.append(btn);
+  }
 
   renderDays();
   renderFootnote();
   render();
 }
 
+function periodTitle(period){
+  const n = Number(period);
+  const last = n % 10, tens = n % 100;
+  const word = (last === 1 && tens !== 11) ? "день"
+             : (last >= 2 && last <= 4 && (tens < 12 || tens > 14)) ? "дня" : "дней";
+  return n + " " + word;
+}
 function periodDays(){ return Math.min(Number(PERIOD), DATA.dates.length); }
 function periodSlice(arr){ return arr.slice(arr.length - periodDays()); }
 
@@ -424,11 +436,12 @@ function renderShare(name, items){
   }
   items.forEach((item, idx) => {
     const color = colorFor(name, item.key, idx);
+    const label = item.label || item.key;
     const seg = el("div");
     seg.style.width = (item.tokens / total * 100) + "%";
     seg.style.background = color;
     seg.addEventListener("mouseenter", e => showTip(
-      `<div class="t">${item.key}</div>` +
+      `<div class="t">${label}</div>` +
       tipRow("Токены", compact(item.tokens)) +
       tipRow("Доля", pct(item.tokens / total)) +
       tipRow("Оценка", money(item.cost), true), e));
@@ -438,15 +451,17 @@ function renderShare(name, items){
 
     const row = el("div","row");
     const sw = el("i","swatch"); sw.style.background = color;
-    row.append(sw, el("div","name",item.key),
+    row.append(sw, el("div","name",label),
       el("div","val",compact(item.tokens)),
       el("div","pct",pct(item.tokens / total)));
     keys.append(row);
   });
 }
 function colorFor(group, key, idx){
-  if (group === "kinds") return key === "автоматика" ? C_AUTO : C_MANUAL;
-  if (group === "flows") return key === "подагенты" ? C_AQUA : C_MANUAL;
+  // Ключи машинные (auto/subagent), а не русские подписи: переименование
+  // подписи в Python не должно молча схлопывать цвета.
+  if (group === "kinds") return key === "auto" ? C_AUTO : C_MANUAL;
+  if (group === "flows") return key === "subagent" ? C_AQUA : C_MANUAL;
   return PALETTE[idx % PALETTE.length];
 }
 
@@ -516,7 +531,7 @@ function detail(m){
   inner.append(list("Топ подпапок", m.subpaths.length
     ? m.subpaths.map(s => [s.key, nf.format(s.touches) + " касаний"])
     : [["путей не нашлось", "—"]]));
-  inner.append(list("Модели", m.models.map(x => [x.key, compact(x.tokens)])));
+  inner.append(list("Модели", m.models.map(x => [x.label || x.key, compact(x.tokens)])));
   inner.append(list("Из чего собран контекст", [
     ["свежий ввод", compact(m.input)],
     ["чтение кэша", compact(m.cache_read)],

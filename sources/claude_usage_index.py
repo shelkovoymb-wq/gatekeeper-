@@ -37,7 +37,9 @@ import os
 import sys
 import tempfile
 import time
+from collections import Counter
 from datetime import datetime, timezone
+from itertools import takewhile
 from pathlib import Path
 
 CACHE_VERSION = 3
@@ -67,6 +69,17 @@ PROJECT_HOME_CANDIDATES = (
 # Порядок счётчиков в строке агрегата.
 COUNTERS = ("input", "cache_read", "cache_write_5m", "cache_write_1h", "output", "calls")
 
+# Строка агрегата: [date, project, model, kind, flow, *COUNTERS, session].
+ROW_HEAD = ("date", "project", "model", "kind", "flow")
+FIRST_COUNTER = len(ROW_HEAD)
+# "calls" — не токены, поэтому в сумму не входит.
+TOKEN_SLICE = slice(FIRST_COUNTER, FIRST_COUNTER + COUNTERS.index("calls"))
+
+
+def row_tokens(row) -> int:
+    """Все токены строки агрегата — одно определение на оба файла."""
+    return sum(row[TOKEN_SLICE])
+
 
 # --------------------------------------------------------------------------- #
 # Пути и конфиг
@@ -76,32 +89,33 @@ def default_transcripts_root() -> Path:
     return Path.home() / ".claude" / "projects"
 
 
+def _xdg(env_name: str, fallback: str, *parts: str) -> Path:
+    base = os.environ.get(env_name)
+    root = Path(base) if base else Path.home() / fallback
+    return root.joinpath("claude-tokens", *parts)
+
+
 def default_cache_path() -> Path:
-    base = os.environ.get("XDG_CACHE_HOME")
-    root = Path(base) if base else Path.home() / ".cache"
-    return root / "claude-tokens" / "index-cache.json"
+    return _xdg("XDG_CACHE_HOME", ".cache", "index-cache.json")
 
 
 def config_path() -> Path:
-    base = os.environ.get("XDG_CONFIG_HOME")
-    root = Path(base) if base else Path.home() / ".config"
-    return root / "claude-tokens" / "config.json"
+    return _xdg("XDG_CONFIG_HOME", ".config", "config.json")
 
 
-def load_config() -> dict:
-    path = config_path()
-    if not path.exists():
-        return {}
+def _read_json(path: Path, default):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (ValueError, OSError):
-        return {}
+        return default
+
+
+def load_config() -> dict:
+    return _read_json(config_path(), {})
 
 
 def save_config(cfg: dict) -> None:
-    path = config_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_write(path, json.dumps(cfg, ensure_ascii=False, indent=2))
+    _atomic_write(config_path(), json.dumps(cfg, ensure_ascii=False, indent=2))
 
 
 def resolve_projects_home(explicit: str | None = None) -> Path | None:
@@ -127,7 +141,7 @@ def resolve_projects_home(explicit: str | None = None) -> Path | None:
         candidate = home / name
         if not candidate.is_dir():
             continue
-        count = sum(1 for p in _safe_iterdir(candidate) if p.is_dir() and not p.name.startswith("."))
+        count = len(known_projects(candidate))
         if count and (best is None or count > best[0]):
             best = (count, candidate)
     return best[1] if best else None
@@ -160,12 +174,8 @@ _PATH_STOPPERS = "\"'`,;)>|&\n\t "
 
 
 def _clean_component(raw: str) -> str:
-    out = []
-    for ch in raw:
-        if ch in _PATH_STOPPERS:
-            break
-        out.append(ch)
-    return "".join(out).strip().rstrip(":.")
+    kept = takewhile(lambda ch: ch not in _PATH_STOPPERS, raw)
+    return "".join(kept).strip().rstrip(":.")
 
 
 def match_project(text: str, home_prefix: str, known: set[str], require_sub: bool):
@@ -339,7 +349,7 @@ def _local_date(ts) -> str | None:
 
 def _fold(order, events, home_prefix, known):
     rows: dict[tuple, list[int]] = {}
-    subpaths: dict[tuple, int] = {}
+    subpaths: Counter = Counter()
 
     resolved: list[tuple[str | None, str | None]] = []
     last_project = None
@@ -391,11 +401,10 @@ def _fold(order, events, home_prefix, known):
         if acc is None:
             rows[row_key] = list(event.counters)
         else:
-            for i in range(len(COUNTERS)):
-                acc[i] += event.counters[i]
+            # zip, а не индексы: перестановка COUNTERS не перемешает колонки
+            rows[row_key] = [a + b for a, b in zip(acc, event.counters)]
         if subpath and proj != UNASSIGNED:
-            sp_key = (event.date, proj, subpath)
-            subpaths[sp_key] = subpaths.get(sp_key, 0) + 1
+            subpaths[(event.date, proj, subpath)] += 1
 
     row_list = [list(k) + v for k, v in rows.items()]
     sub_list = [list(k) + [v] for k, v in subpaths.items()]
@@ -418,20 +427,11 @@ def _atomic_write(path: Path, text: str) -> None:
             os.fsync(handle.fileno())
         os.replace(tmp, path)
     finally:
-        if os.path.exists(tmp):
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
+        Path(tmp).unlink(missing_ok=True)
 
 
 def load_cache(path: Path) -> dict:
-    if not path.exists():
-        return {"version": CACHE_VERSION, "files": {}}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (ValueError, OSError):
-        return {"version": CACHE_VERSION, "files": {}}
+    data = _read_json(path, None)
     if not isinstance(data, dict) or data.get("version") != CACHE_VERSION:
         return {"version": CACHE_VERSION, "files": {}}
     data.setdefault("files", {})
@@ -563,10 +563,10 @@ def _main(argv=None) -> int:
     cache = Path(args.cache).expanduser() if args.cache else default_cache_path()
 
     result = build_index(transcripts, projects_home, cache, args.retention_days)
-    totals: dict[str, int] = {}
+    totals: Counter = Counter()
     for row in result["rows"]:
-        totals[row[1]] = totals.get(row[1], 0) + sum(row[5:10])
-    for project, tokens in sorted(totals.items(), key=lambda kv: -kv[1])[:20]:
+        totals[row[1]] += row_tokens(row)
+    for project, tokens in totals.most_common(20):
         print(f"{tokens:>15,}  {project}")
     return 0
 

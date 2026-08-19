@@ -135,7 +135,10 @@ systemctl --user enable --now claude-tokens.timer
   "periods": ["1", "7", "30"],
   "totals": { "1": {...}, "7": {...}, "30": {...} },
   //   tokens / input / cache_read / cache_write / output / calls / cost /
-  //   cache_share / sessions / projects / unpriced_tokens + models|kinds|flows
+  //   cache_share / sessions / projects / unpriced_tokens
+  //   + models|kinds|flows: [{key, label, tokens, cost}] — key машинный
+  //     (manual|auto, main|subagent, claude-opus-5), label человеческий:
+  //     витрина красит по key, показывает label
   "daily":  [ {date, tokens, cost, calls, sessions, manual, auto, top_project} ],
   "projects": [ {key, label, series[30], cost_series[30], last_day,
                  periods: {"1": {...+subpaths}, "7": {...}, "30": {...}} } ],
