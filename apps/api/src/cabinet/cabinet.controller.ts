@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { Auth, JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthContext } from '../auth/auth.types.js';
-import { CabinetService } from './cabinet.service.js';
+import { CabinetService, type CreatePaymentAccountInput } from './cabinet.service.js';
 
 function clientIdOf(auth: AuthContext): string {
   if (!auth.clientId) {
@@ -102,7 +102,7 @@ export class CabinetController {
   }
 
   @Post('payment-accounts')
-  addPaymentAccount(@Auth() auth: AuthContext, @Body() dto: Record<string, unknown>) {
+  addPaymentAccount(@Auth() auth: AuthContext, @Body() dto: CreatePaymentAccountInput) {
     return this.cabinet.addPaymentAccount(clientIdOf(auth), dto ?? {});
   }
 

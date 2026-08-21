@@ -2,97 +2,14 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { formatDate } from '@/lib/format'
-
-interface PaymentAccount {
-  id: string
-  accountType: string
-  bankName: string | null
-  accountNumber: string | null
-  bic: string | null
-  inn: string | null
-  phoneSbp: string | null
-  paypalEmail: string | null
-  cryptoAddress: string | null
-  cryptoType: string | null
-  cardLast4: string | null
-  cardHolder: string | null
-  isActive: boolean
-  verificationStatus: string
-  createdAt: string
-}
-
-/** Поля под каждый тип реквизитов — набор тот же, что у владельца платформы. */
-const ACCOUNT_FORMS: {
-  type: string
-  label: string
-  icon: string
-  fields: { key: string; label: string }[]
-}[] = [
-  {
-    type: 'bank_account',
-    label: 'Банковский счёт',
-    icon: '🏦',
-    fields: [
-      { key: 'bankName', label: 'Банк' },
-      { key: 'accountNumber', label: 'Номер счёта' },
-      { key: 'bic', label: 'БИК' },
-      { key: 'inn', label: 'ИНН' },
-    ],
-  },
-  {
-    type: 'card',
-    label: 'Карта',
-    icon: '💳',
-    fields: [
-      { key: 'cardLast4', label: 'Последние 4 цифры' },
-      { key: 'cardHolder', label: 'Держатель' },
-    ],
-  },
-  { type: 'sbp', label: 'СБП', icon: '⚡', fields: [{ key: 'phoneSbp', label: 'Телефон (+7…)' }] },
-  { type: 'paypal', label: 'PayPal', icon: '🌐', fields: [{ key: 'paypalEmail', label: 'Email' }] },
-  {
-    type: 'crypto',
-    label: 'Криптовалюта',
-    icon: '₿',
-    fields: [
-      { key: 'cryptoAddress', label: 'Адрес кошелька' },
-      { key: 'cryptoType', label: 'Сеть (btc / eth / usdt)' },
-    ],
-  },
-]
-
-const verificationBadge: Record<string, string> = {
-  verified: 'bg-emerald-500/10 text-emerald-700',
-  pending: 'bg-amber-500/10 text-amber-700',
-  unverified: 'bg-ledger-ink/10 text-ledger-ink/60',
-  rejected: 'bg-danger/10 text-red-700',
-}
-
-const verificationLabel: Record<string, string> = {
-  verified: 'подтверждены',
-  pending: 'на проверке',
-  unverified: 'не проверены',
-  rejected: 'отклонены',
-}
-
-function describeAccount(a: PaymentAccount): string {
-  switch (a.accountType) {
-    case 'bank_account':
-      return [a.bankName, a.accountNumber].filter(Boolean).join(' · ') || '—'
-    case 'card':
-      return (
-        [a.cardLast4 ? `•••• ${a.cardLast4}` : null, a.cardHolder].filter(Boolean).join(' · ') || '—'
-      )
-    case 'sbp':
-      return a.phoneSbp || '—'
-    case 'paypal':
-      return a.paypalEmail || '—'
-    case 'crypto':
-      return [a.cryptoAddress, a.cryptoType?.toUpperCase()].filter(Boolean).join(' · ') || '—'
-    default:
-      return '—'
-  }
-}
+import {
+  ACCOUNT_FORMS,
+  describeAccount,
+  formOf,
+  verificationBadge,
+  verificationLabel,
+  type PaymentAccount,
+} from '@/lib/payment-accounts'
 
 export default function ClientPaymentAccountsPage() {
   const [accounts, setAccounts] = useState<PaymentAccount[]>([])
@@ -120,12 +37,24 @@ export default function ClientPaymentAccountsPage() {
     load()
   }, [load])
 
-  const activeForm = ACCOUNT_FORMS.find((f) => f.type === formType)!
+  const activeForm = ACCOUNT_FORMS.find((f) => f.type === formType) ?? ACCOUNT_FORMS[0]
 
-  const addAccount = async () => {
+  /** Общий скелет действия: без него у «Добавить» не было catch и сетевая ошибка терялась. */
+  const run = async (action: () => Promise<void>) => {
     setBusy(true)
     setError(null)
     try {
+      await action()
+      await load()
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const addAccount = () =>
+    run(async () => {
       const payload: Record<string, string> = { accountType: formType }
       for (const f of activeForm.fields) {
         const v = values[f.key]?.trim()
@@ -138,21 +67,12 @@ export default function ClientPaymentAccountsPage() {
       }).then((x) => x.json())
       if (!r.success) setError(r.error || 'Не удалось добавить реквизиты')
       else setValues({})
-      await load()
-    } finally {
-      setBusy(false)
-    }
-  }
+    })
 
-  const deactivate = async (id: string) => {
-    setBusy(true)
-    try {
+  const deactivate = (id: string) =>
+    run(async () => {
       await fetch(`/api/payment-accounts/${id}`, { method: 'DELETE' })
-      await load()
-    } finally {
-      setBusy(false)
-    }
-  }
+    })
 
   return (
     <div>
@@ -235,7 +155,7 @@ export default function ClientPaymentAccountsPage() {
             </thead>
             <tbody className="divide-y divide-ledger-ink/10 bg-ledger-page">
               {accounts.map((a) => {
-                const meta = ACCOUNT_FORMS.find((f) => f.type === a.accountType)
+                const meta = formOf(a.accountType)
                 return (
                   <tr
                     key={a.id}

@@ -26,6 +26,15 @@ import { BotsService } from '../bots/bots.service.js';
 import { PlansService, type CreatePlanInput } from '../plans/plans.service.js';
 import { ChannelsService } from '../channels/channels.service.js';
 import { PaymentsService } from '../payments/payments.service.js';
+import {
+  CRYPTO_TYPES,
+  PAYMENT_ACCOUNT_TYPES,
+  cardLast4,
+  isCryptoType,
+  isPaymentAccountType,
+  maskAccountNumber,
+  type PaymentAccountType,
+} from '../payments/account-types.js';
 
 /** Провайдеры, которые клиент может настроить в кабинете. */
 export const PAYMENT_PROVIDERS = [
@@ -37,9 +46,69 @@ export const PAYMENT_PROVIDERS = [
 ] as const;
 export type PaymentProviderId = (typeof PAYMENT_PROVIDERS)[number];
 
-/** Типы реквизитов, которые клиент может завести в кабинете — те же, что у владельца. */
-export const CLIENT_ACCOUNT_TYPES = ['bank_account', 'card', 'sbp', 'paypal', 'crypto'] as const;
-export const CRYPTO_TYPES = ['btc', 'eth', 'usdt'] as const;
+/** Тело запроса на добавление реквизитов — имена полей общие с владельческой ручкой. */
+export interface CreatePaymentAccountInput {
+  accountType?: string;
+  bankName?: string;
+  accountNumber?: string;
+  bic?: string;
+  inn?: string;
+  cardLast4?: string;
+  cardHolder?: string;
+  phoneSbp?: string;
+  paypalEmail?: string;
+  cryptoAddress?: string;
+  cryptoType?: string;
+}
+
+type ColumnsFor = (
+  str: (k: keyof CreatePaymentAccountInput) => string | undefined,
+) => Partial<typeof directPaymentAccounts.$inferInsert>;
+
+/**
+ * Что каждый тип реквизитов кладёт в колонки. Записан таблицей, а не switch-ем:
+ * `Record<PaymentAccountType, …>` заставляет компилятор требовать ветку на
+ * каждый тип из общего списка, поэтому забытый тип — ошибка сборки, а не
+ * молча вставленная строка без реквизитов.
+ */
+const ACCOUNT_COLUMNS: Record<PaymentAccountType, ColumnsFor> = {
+  bank_account: (str) => {
+    const bankName = str('bankName');
+    const accountNumber = str('accountNumber');
+    if (!bankName || !accountNumber) {
+      throw new BadRequestException('для банковского счёта нужны bankName и accountNumber');
+    }
+    return { bankName, accountNumber, bic: str('bic'), inn: str('inn') };
+  },
+  card: (str) => {
+    const last4 = str('cardLast4');
+    if (!last4 || !/^\d{4}$/.test(last4)) {
+      throw new BadRequestException('cardLast4 — ровно 4 цифры, полный номер карты не принимаем');
+    }
+    return { cardNumberMasked: `****${last4}`, cardHolder: str('cardHolder') };
+  },
+  sbp: (str) => {
+    const phone = str('phoneSbp');
+    if (!phone) throw new BadRequestException('для СБП нужен phoneSbp');
+    // phoneNumber дублирует phoneForSbp ради легаси-ручки /payment-accounts:
+    // она отдаёт наружу именно phoneNumber, и n8n читает его.
+    return { phoneForSbp: phone, phoneNumber: phone };
+  },
+  paypal: (str) => {
+    const email = str('paypalEmail');
+    if (!email) throw new BadRequestException('для PayPal нужен paypalEmail');
+    return { email };
+  },
+  crypto: (str) => {
+    const address = str('cryptoAddress');
+    const type = str('cryptoType')?.toLowerCase();
+    if (!address) throw new BadRequestException('для криптовалюты нужен cryptoAddress');
+    if (!type || !isCryptoType(type)) {
+      throw new BadRequestException(`cryptoType должен быть одним из: ${CRYPTO_TYPES.join(', ')}`);
+    }
+    return { cryptoAddress: address, cryptoType: type };
+  },
+};
 
 @Injectable()
 export class CabinetService {
@@ -455,23 +524,25 @@ export class CabinetService {
    * плодить дубли колонок ради него незачем.
    */
   private mapAccount(a: typeof directPaymentAccounts.$inferSelect) {
+    // Явно перечислены только переименования и то, что наружу не уходит:
+    // clientId, phoneNumber и updatedAt отбрасываются намеренно.
+    const {
+      clientId: _clientId,
+      phoneNumber: _phoneNumber,
+      updatedAt: _updatedAt,
+      accountNumber,
+      phoneForSbp,
+      email,
+      cardNumberMasked,
+      ...rest
+    } = a;
+
     return {
-      id: a.id,
-      accountType: a.accountType,
-      bankName: a.bankName,
-      accountNumber: a.accountNumber ? `****${a.accountNumber.slice(-4)}` : null,
-      bic: a.bic,
-      inn: a.inn,
-      phoneSbp: a.phoneForSbp,
-      paypalEmail: a.email,
-      cryptoAddress: a.cryptoAddress,
-      cryptoType: a.cryptoType,
-      cardLast4: a.cardNumberMasked ? a.cardNumberMasked.slice(-4) : null,
-      cardHolder: a.cardHolder,
-      isActive: a.isActive,
-      verificationStatus: a.verificationStatus,
-      verifiedAt: a.verifiedAt,
-      createdAt: a.createdAt,
+      ...rest,
+      accountNumber: maskAccountNumber(accountNumber),
+      phoneSbp: phoneForSbp,
+      paypalEmail: email,
+      cardLast4: cardLast4(cardNumberMasked),
     };
   }
 
@@ -484,74 +555,36 @@ export class CabinetService {
     return rows.map((a) => this.mapAccount(a));
   }
 
-  async addPaymentAccount(clientId: string, input: Record<string, unknown>) {
+  async addPaymentAccount(clientId: string, input: CreatePaymentAccountInput) {
     const accountType = String(input.accountType ?? '');
-    if (!(CLIENT_ACCOUNT_TYPES as readonly string[]).includes(accountType)) {
+    if (!isPaymentAccountType(accountType)) {
       throw new BadRequestException(
-        `accountType должен быть одним из: ${CLIENT_ACCOUNT_TYPES.join(', ')}`,
+        `accountType должен быть одним из: ${PAYMENT_ACCOUNT_TYPES.join(', ')}`,
       );
     }
 
-    const str = (k: string): string | undefined => {
+    const str = (k: keyof CreatePaymentAccountInput): string | undefined => {
       const v = input[k];
       if (v === null || v === undefined) return undefined;
       const s = String(v).trim();
       return s === '' ? undefined : s;
     };
 
-    const values: typeof directPaymentAccounts.$inferInsert = {
+    const values = {
       clientId,
       accountType,
       isActive: true,
       // Подтверждает реквизиты платформа, а не сам клиент: verified здесь —
       // разрешение принимать деньги, выдавать его себе самому нельзя.
       verificationStatus: 'pending',
-    };
-
-    switch (accountType) {
-      case 'bank_account': {
-        const bankName = str('bankName');
-        const accountNumber = str('accountNumber');
-        if (!bankName || !accountNumber) {
-          throw new BadRequestException('для банковского счёта нужны bankName и accountNumber');
-        }
-        Object.assign(values, { bankName, accountNumber, bic: str('bic'), inn: str('inn') });
-        break;
-      }
-      case 'card': {
-        const last4 = str('cardLast4');
-        if (!last4 || !/^\d{4}$/.test(last4)) {
-          throw new BadRequestException('cardLast4 — ровно 4 цифры, полный номер карты не принимаем');
-        }
-        Object.assign(values, { cardNumberMasked: `****${last4}`, cardHolder: str('cardHolder') });
-        break;
-      }
-      case 'sbp': {
-        const phone = str('phoneSbp');
-        if (!phone) throw new BadRequestException('для СБП нужен phoneSbp');
-        Object.assign(values, { phoneForSbp: phone, phoneNumber: phone });
-        break;
-      }
-      case 'paypal': {
-        const email = str('paypalEmail');
-        if (!email) throw new BadRequestException('для PayPal нужен paypalEmail');
-        Object.assign(values, { email });
-        break;
-      }
-      case 'crypto': {
-        const address = str('cryptoAddress');
-        const type = str('cryptoType')?.toLowerCase();
-        if (!address) throw new BadRequestException('для криптовалюты нужен cryptoAddress');
-        if (!type || !(CRYPTO_TYPES as readonly string[]).includes(type)) {
-          throw new BadRequestException(`cryptoType должен быть одним из: ${CRYPTO_TYPES.join(', ')}`);
-        }
-        Object.assign(values, { cryptoAddress: address, cryptoType: type });
-        break;
-      }
-    }
+      ...ACCOUNT_COLUMNS[accountType](str),
+    } satisfies typeof directPaymentAccounts.$inferInsert;
 
     // Активный счёт каждого типа — один: прямой перевод выбирает реквизиты
-    // получателя сам, и при двух активных выбор был бы произвольным.
+    // получателя сам, и при двух активных выбор был бы произвольным. Частичный
+    // уникальный индекс (миграция 0003) это же и стережёт на уровне БД.
+    // Фильтр по is_active обязателен: без него переписывались и давно
+    // отключённые записи того же типа — вся история счёта разом.
     await this.db
       .update(directPaymentAccounts)
       .set({ isActive: false, updatedAt: new Date() })
@@ -559,6 +592,7 @@ export class CabinetService {
         and(
           eq(directPaymentAccounts.clientId, clientId),
           eq(directPaymentAccounts.accountType, accountType),
+          eq(directPaymentAccounts.isActive, true),
         ),
       );
 

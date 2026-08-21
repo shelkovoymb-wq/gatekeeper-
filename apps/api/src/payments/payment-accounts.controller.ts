@@ -47,6 +47,20 @@ interface UpdateAccountInput {
   isActive?: boolean;
 }
 
+/**
+ * В колонке card_number_masked должен лежать только хвост номера — так её
+ * читает и кабинет, и UI. Эта ручка исторически писала туда что прислали:
+ * `cardNumberMasked: "4242424242424242"` оседал полным PAN, а наружу всё
+ * равно отдавался как `•••• 4242`, то есть по интерфейсу утечку было не видно.
+ * Обрезаем на записи, а не отвергаем: формат присланного (`**** 1234`,
+ * `4242 4242 4242 1234`) у вызывающих её воркфлоу разный.
+ */
+function keepLast4(masked: string | undefined): string | undefined {
+  if (masked === undefined) return undefined;
+  const digits = masked.replace(/\D/g, '');
+  return digits.length >= 4 ? `****${digits.slice(-4)}` : masked;
+}
+
 @Controller('payment-accounts')
 export class PaymentAccountsController {
   constructor(@Inject(DB) private readonly db: Database) {}
@@ -99,7 +113,7 @@ export class PaymentAccountsController {
       .values({
         clientId: input.clientId,
         accountType: input.accountType,
-        cardNumberMasked: input.cardNumberMasked,
+        cardNumberMasked: keepLast4(input.cardNumberMasked),
         cardHolder: input.cardHolder,
         bankName: input.bankName,
         accountNumber: input.accountNumber,
@@ -194,7 +208,7 @@ export class PaymentAccountsController {
     const [updated] = await this.db
       .update(directPaymentAccounts)
       .set({
-        cardNumberMasked: input.cardNumberMasked ?? account.cardNumberMasked,
+        cardNumberMasked: keepLast4(input.cardNumberMasked) ?? account.cardNumberMasked,
         cardHolder: input.cardHolder ?? account.cardHolder,
         bankName: input.bankName ?? account.bankName,
         accountNumber: input.accountNumber ?? account.accountNumber,
