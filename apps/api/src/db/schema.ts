@@ -302,6 +302,11 @@ export const payments = pgTable(
     currency: text('currency').notNull(),
     status: text('status').notNull(), // pending|succeeded|failed|refunded
     kind: text('kind').notNull().default('purchase'), // purchase|renewal|refund
+    // Кто перевёл платёж в succeeded: null — провайдер (подписанный вебхук либо
+    // встречный запрос в его API), 'client' — клиент отметил в кабинете, что
+    // деньги пришли на его реквизиты. Второе учитывается в обороте отдельно.
+    confirmedBy: text('confirmed_by'),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
     raw: jsonb('raw'),
     metadata: jsonb('metadata'),
     createdAt: nowDefault(),

@@ -17,7 +17,10 @@ const providerLabels: Record<PaymentProvider, string> = {
   yookassa: 'ЮKassa',
   cloudpayments: 'CloudPayments',
   robokassa: 'Robokassa',
+  prodamus: 'Prodamus',
   stars: 'Telegram Stars',
+  direct: 'Прямой перевод',
+  free: 'Бесплатно',
 }
 
 const statusFilters: Array<{ value: string; label: string }> = [
@@ -31,17 +34,38 @@ const statusFilters: Array<{ value: string; label: string }> = [
 export default function PaymentsPage() {
   const { payments, loading, error, fetchPayments } = usePayments()
   const [status, setStatus] = useState('all')
+  const [busy, setBusy] = useState<string | null>(null)
+  const [note, setNote] = useState<string | null>(null)
 
   useEffect(() => {
     fetchPayments({ status, dateRange: 'all' })
   }, [status, fetchPayments])
+
+  // Прямой перевод банк платформе не подтверждает, поэтому «деньги пришли»
+  // отмечает сам получатель — иначе платёж навсегда останется в ожидании и не
+  // попадёт ни в оборот, ни в комиссию.
+  const confirm = async (id: string) => {
+    setBusy(id)
+    setNote(null)
+    try {
+      const r = await fetch(`/api/payments/${id}/confirm`, { method: 'POST' }).then((x) => x.json())
+      if (!r.success) setNote(r.error || 'Не удалось подтвердить платёж')
+      else setNote('Платёж отмечен как полученный')
+      await fetchPayments({ status, dateRange: 'all' })
+    } catch (e) {
+      setNote(String(e))
+    } finally {
+      setBusy(null)
+    }
+  }
 
   return (
     <div>
       <header className="mb-8">
         <h1 className="font-display text-2xl text-ledger-page md:text-3xl">Платежи</h1>
         <p className="mt-1 text-sm text-ledger-page/60">
-          История транзакций по всем платёжным провайдерам
+          История транзакций по всем способам приёма. Прямые переводы отмечайте кнопкой
+          «Деньги получены» — так они попадут в оборот.
         </p>
       </header>
 
@@ -60,6 +84,12 @@ export default function PaymentsPage() {
           </button>
         ))}
       </div>
+
+      {note && (
+        <div className="mb-6 rounded-sm border border-ledger-page/20 bg-ledger-page/5 px-4 py-3 text-sm text-ledger-page/80">
+          {note}
+        </div>
+      )}
 
       {error && (
         <div className="mb-6 rounded-sm border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-red-300">
@@ -84,6 +114,7 @@ export default function PaymentsPage() {
                 <th className="px-6 py-4 font-medium">Провайдер</th>
                 <th className="px-6 py-4 font-medium">Статус</th>
                 <th className="px-6 py-4 font-medium">ID платежа</th>
+                <th className="px-6 py-4 font-medium">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-ledger-ink/10 bg-ledger-page">
@@ -109,9 +140,30 @@ export default function PaymentsPage() {
                       >
                         {st.label}
                       </span>
+                      {p.confirmedBy === 'client' && (
+                        <span
+                          className="ml-2 rounded-sm bg-ledger-ink/10 px-2 py-1 font-ledger-mono text-xs text-ledger-ink/55"
+                          title="Платёж закрыт отметкой получателя, а не ответом платёжной системы"
+                        >
+                          со слов
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 font-ledger-mono text-xs text-ledger-ink/45">
                       {p.id.slice(0, 8)}…
+                    </td>
+                    <td className="px-6 py-4">
+                      {p.provider === 'direct' && p.status === 'pending' ? (
+                        <button
+                          onClick={() => confirm(p.id)}
+                          disabled={busy === p.id}
+                          className="rounded-sm bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-500/20 disabled:opacity-50"
+                        >
+                          {busy === p.id ? '…' : 'Деньги получены'}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-ledger-ink/30">—</span>
+                      )}
                     </td>
                   </tr>
                 )

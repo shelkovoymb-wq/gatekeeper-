@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { Auth, JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthContext } from '../auth/auth.types.js';
-import { CabinetService } from './cabinet.service.js';
+import { CabinetService, type CreatePaymentAccountInput } from './cabinet.service.js';
 
 function clientIdOf(auth: AuthContext): string {
   if (!auth.clientId) {
@@ -96,13 +96,24 @@ export class CabinetController {
     return this.cabinet.refundPayment(clientIdOf(auth), paymentId, dto?.amount, dto?.reason);
   }
 
+  /** Все способы получения денег одним списком: платёжные системы + свои реквизиты. */
+  @Get('payment-methods')
+  listPaymentMethods(@Auth() auth: AuthContext) {
+    return this.cabinet.listPaymentMethods(clientIdOf(auth));
+  }
+
+  @Post('transactions/:paymentId/confirm')
+  confirmDirectPayment(@Auth() auth: AuthContext, @Param('paymentId') paymentId: string) {
+    return this.cabinet.confirmDirectPayment(clientIdOf(auth), paymentId);
+  }
+
   @Get('payment-accounts')
   listPaymentAccounts(@Auth() auth: AuthContext) {
     return this.cabinet.listPaymentAccounts(clientIdOf(auth));
   }
 
   @Post('payment-accounts')
-  addPaymentAccount(@Auth() auth: AuthContext, @Body() dto: Record<string, unknown>) {
+  addPaymentAccount(@Auth() auth: AuthContext, @Body() dto: CreatePaymentAccountInput) {
     return this.cabinet.addPaymentAccount(clientIdOf(auth), dto ?? {});
   }
 

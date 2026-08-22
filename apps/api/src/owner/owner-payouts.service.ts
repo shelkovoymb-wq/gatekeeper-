@@ -12,9 +12,15 @@ import {
   ownerPayouts,
   ownerPayoutEvents,
 } from '../db/schema.js';
+import {
+  CRYPTO_TYPES,
+  PAYMENT_ACCOUNT_TYPES,
+  isCryptoType,
+  maskAccountNumber,
+} from '../payments/account-types.js';
 
-/** Типы реквизитов, которые понимает система выплат. */
-export const ACCOUNT_TYPES = ['bank_account', 'card', 'sbp', 'paypal', 'crypto'] as const;
+/** Типы реквизитов, которые понимает система выплат — общий список на всю платформу. */
+export const ACCOUNT_TYPES = PAYMENT_ACCOUNT_TYPES;
 
 export interface CreatePaymentAccountInput {
   accountType: string;
@@ -50,6 +56,11 @@ export class OwnerPayoutsService {
       throw new BadRequestException(
         `accountType must be one of: ${ACCOUNT_TYPES.join(', ')}`,
       );
+    }
+    // Сеть проверяем и здесь: без этого выплата уезжала бы в несуществующую
+    // сеть (кабинет клиента такое отвергает, владелец принимал молча).
+    if (accountType === 'crypto' && rest.cryptoType && !isCryptoType(rest.cryptoType)) {
+      throw new BadRequestException(`cryptoType must be one of: ${CRYPTO_TYPES.join(', ')}`);
     }
 
     const [account] = await this.db
@@ -226,9 +237,6 @@ export class OwnerPayoutsService {
   /** Наружу отдаём счёт без шифрованных реквизитов и с маскированным номером. */
   private maskAccount(account: typeof ownerPaymentAccounts.$inferSelect) {
     const { credentialsEnc: _credentialsEnc, ...safe } = account;
-    return {
-      ...safe,
-      accountNumber: safe.accountNumber ? `****${safe.accountNumber.slice(-4)}` : null,
-    };
+    return { ...safe, accountNumber: maskAccountNumber(safe.accountNumber) };
   }
 }
