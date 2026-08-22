@@ -28,6 +28,7 @@ const ownerNav = [
   { href: '/owner/plans', label: 'Тарифы платформы', icon: '🏷️' },
   { href: '/owner/billing', label: 'Биллинг', icon: '🧾' },
   { href: '/owner/payouts', label: 'Реквизиты и выплаты', icon: '💰' },
+  { href: '/owner/client-accounts', label: 'Реквизиты клиентов', icon: '🏦' },
   { href: '/owner/settings', label: 'Настройки', icon: '⚙️' },
 ]
 

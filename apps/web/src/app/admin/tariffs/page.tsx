@@ -10,6 +10,7 @@ interface Plan {
   currency: string
   periodDays: number
   trialDays: number
+  starsPrice: number | null
   channelIds: string[]
 }
 interface Channel {
@@ -35,6 +36,7 @@ export default function TariffsPage() {
   const [price, setPrice] = useState('')
   const [periodDays, setPeriodDays] = useState(30)
   const [trialDays, setTrialDays] = useState('')
+  const [starsPrice, setStarsPrice] = useState('')
   const [selChannels, setSelChannels] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
 
@@ -71,6 +73,7 @@ export default function TariffsPage() {
           price: Number(price),
           periodDays,
           trialDays: trialDays ? Number(trialDays) : 0,
+          starsPrice: starsPrice ? Number(starsPrice) : undefined,
           channelIds: selChannels,
         }),
       })
@@ -78,6 +81,7 @@ export default function TariffsPage() {
       if (!r.ok || !d.success) throw new Error(d.error || 'Ошибка создания тарифа')
       setName('')
       setPrice('')
+      setStarsPrice('')
       setTrialDays('')
       setSelChannels([])
       await load()
@@ -148,6 +152,19 @@ export default function TariffsPage() {
               onChange={setTrialDays}
               placeholder="0"
             />
+            <div>
+              <Input
+                label="Цена в Telegram Stars (необязательно)"
+                type="number"
+                value={starsPrice}
+                onChange={setStarsPrice}
+                placeholder="напр. 250"
+              />
+              <p className="mt-1 text-xs text-ledger-ink/50">
+                Сколько звёзд списывать при оплате звёздами. Не заполнено — бот возьмёт по одной
+                звезде за рубль цены, а это обычно дороже задуманного.
+              </p>
+            </div>
             {channels.length > 0 && (
               <div>
                 <span className="mb-1.5 block text-sm font-medium text-ledger-ink/60">Каналы</span>
@@ -205,6 +222,12 @@ export default function TariffsPage() {
                   <p className="mt-1 text-sm text-ledger-ink/55">
                     {p.periodDays === 0 ? 'навсегда' : `на ${p.periodDays} дн.`}
                     {p.trialDays > 0 && ` · триал ${p.trialDays} дн.`}
+                  </p>
+                  <p className="mt-1 text-sm text-ledger-ink/55">
+                    ⭐{' '}
+                    {p.starsPrice != null
+                      ? `${p.starsPrice} звёзд`
+                      : `${Math.max(1, Math.round(p.price))} звёзд (по цене, не задано)`}
                   </p>
                   <p className="mt-2 text-xs text-ledger-ink/45">
                     Каналов: {p.channelIds.length || '—'}

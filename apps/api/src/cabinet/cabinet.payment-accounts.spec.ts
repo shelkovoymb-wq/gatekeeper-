@@ -22,7 +22,7 @@ function row(over: Record<string, unknown> = {}) {
     cryptoAddress: null,
     cryptoType: null,
     isActive: true,
-    verificationStatus: 'pending',
+    verificationStatus: 'not_required',
     verifiedAt: null,
     createdAt: new Date('2026-08-17T00:00:00Z'),
     updatedAt: new Date('2026-08-17T00:00:00Z'),
@@ -79,19 +79,22 @@ describe('CabinetService — реквизиты клиента', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('всегда ставит pending — клиент не подтверждает себя сам', async () => {
+    it('не даёт задать статус проверки через тело запроса', async () => {
       fake.queue([], [row()]);
 
       await service.addPaymentAccount(CLIENT_A, {
         accountType: 'bank_account',
         bankName: 'Сбербанк',
         accountNumber: '40817810638050123456',
-        verificationStatus: 'verified', // попытка протащить статус через тело
+        verificationStatus: 'verified', // статус из тела игнорируется
         isActive: true,
       });
 
       const [values] = fake.argsOf('values') as [Record<string, unknown>];
-      expect(values.verificationStatus).toBe('pending');
+      // Предварительного одобрения больше нет: реквизиты работают сразу, а
+      // выключить их может владелец через is_active. Поле из тела не влияет.
+      expect(values.verificationStatus).toBe('not_required');
+      expect(values.isActive).toBe(true);
     });
 
     it('привязывает счёт к clientId из токена, а не из тела', async () => {

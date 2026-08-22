@@ -29,8 +29,16 @@ export class DirectTransferProvider implements PaymentProviderAdapter {
    * или вебхука от банка.
    */
   async initiate(request: PaymentRequest): Promise<{ url: string | null; paymentId: string }> {
-    // Реквизиты получателя (клиента, который продаёт доступ). Фильтр по
-    // is_active и verified стоит прямо в запросе: клиент может завести
+    // Реквизиты получателя (клиента, который продаёт доступ).
+    //
+    // Условие ровно одно — is_active. Предварительной проверки платформой тут
+    // больше нет: деньги идут клиенту на его же реквизиты, ошибётся он в номере
+    // телефона — пострадает сам, а держать чужие переводы заблокированными до
+    // ручного одобрения смысла нет. Контроль остался, но по факту: владелец
+    // видит реквизиты всех клиентов и может отключить любые (is_active=false),
+    // после чего инициировать по ним платёж уже нельзя.
+    //
+    // Фильтр стоит прямо в запросе, а не после выборки: у клиента может быть
     // несколько счетов, и без него сюда попадала бы произвольная строка —
     // например давно отключённая карта.
     const payeeClientId = request.metadata?.payeeClientId as string | undefined;
@@ -45,14 +53,13 @@ export class DirectTransferProvider implements PaymentProviderAdapter {
         and(
           eq(directPaymentAccounts.clientId, payeeClientId),
           eq(directPaymentAccounts.isActive, true),
-          eq(directPaymentAccounts.verificationStatus, 'verified'),
         ),
       )
       .limit(1);
 
     if (!account) {
       throw new BadRequestException(
-        'Direct payment account not configured, inactive or not verified for payee',
+        'Direct payment account not configured or disabled for payee',
       );
     }
 
