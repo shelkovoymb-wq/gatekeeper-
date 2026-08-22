@@ -96,6 +96,17 @@ export class CabinetController {
     return this.cabinet.refundPayment(clientIdOf(auth), paymentId, dto?.amount, dto?.reason);
   }
 
+  /** Все способы получения денег одним списком: платёжные системы + свои реквизиты. */
+  @Get('payment-methods')
+  listPaymentMethods(@Auth() auth: AuthContext) {
+    return this.cabinet.listPaymentMethods(clientIdOf(auth));
+  }
+
+  @Post('transactions/:paymentId/confirm')
+  confirmDirectPayment(@Auth() auth: AuthContext, @Param('paymentId') paymentId: string) {
+    return this.cabinet.confirmDirectPayment(clientIdOf(auth), paymentId);
+  }
+
   @Get('payment-accounts')
   listPaymentAccounts(@Auth() auth: AuthContext) {
     return this.cabinet.listPaymentAccounts(clientIdOf(auth));

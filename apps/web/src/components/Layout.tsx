@@ -15,7 +15,7 @@ const clientNav = [
   { href: '/admin/tariffs', label: 'Тарифы', icon: '🏷️' },
   { href: '/admin/users', label: 'Подписчики', icon: '👥' },
   { href: '/admin/payments', label: 'Платежи', icon: '💳' },
-  { href: '/admin/payment-accounts', label: 'Мои реквизиты', icon: '💰' },
+  { href: '/admin/payment-methods', label: 'Приём денег', icon: '💰' },
   { href: '/admin/billing', label: 'Оплата платформы', icon: '🧾' },
   { href: '/admin/settings', label: 'Настройка', icon: '⚙️' },
   { href: '/admin/assistant', label: 'Ассистент', icon: '🤖' },

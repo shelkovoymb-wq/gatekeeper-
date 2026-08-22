@@ -287,6 +287,10 @@ export class CabinetService {
       currency: p.currency,
       provider: p.provider,
       status: p.status,
+      // Нужны кабинету: по ним рисуется кнопка «Деньги получены» у ожидающего
+      // прямого перевода и пометка «со слов» у подтверждённого клиентом.
+      confirmedBy: p.confirmedBy,
+      confirmedAt: p.confirmedAt?.toISOString?.() ?? null,
       createdAt: p.createdAt?.toISOString?.() ?? String(p.createdAt),
       updatedAt: p.updatedAt?.toISOString?.() ?? undefined,
       metadata: (p.metadata as Record<string, unknown>) ?? {},
@@ -598,6 +602,71 @@ export class CabinetService {
 
     const [created] = await this.db.insert(directPaymentAccounts).values(values).returning();
     return this.mapAccount(created);
+  }
+
+  /**
+   * Все способы получения денег одним списком.
+   *
+   * Платёжная система и собственные реквизиты — для клиента одно и то же:
+   * «куда мне приходят деньги». Хранятся они в разных таблицах (у первых —
+   * зашифрованные ключи, у вторых — номер счёта и статус проверки), но кабинету
+   * незачем показывать это разделение двумя экранами.
+   */
+  async listPaymentMethods(clientId: string) {
+    const [providers, accounts] = await Promise.all([
+      this.listPayments(clientId),
+      this.listPaymentAccounts(clientId),
+    ]);
+
+    return {
+      providers: providers.map((p) => ({ ...p, kind: 'provider' as const })),
+      accounts: accounts.map((a) => ({ ...a, kind: 'account' as const })),
+    };
+  }
+
+  /**
+   * Клиент отмечает, что прямой перевод дошёл.
+   *
+   * У банка вебхука нет, поэтому иначе платёж навсегда остался бы pending:
+   * деньги у клиента, а платформа их не видит — ни в обороте, ни в комиссии.
+   * Отметка проставляет confirmedBy='client', и в счёте такой оборот показан
+   * отдельной строкой: посчитан он со слов клиента, а не по подписи провайдера.
+   */
+  async confirmDirectPayment(clientId: string, paymentId: string) {
+    const [payment] = await this.db
+      .select({
+        id: payments.id,
+        provider: payments.provider,
+        status: payments.status,
+      })
+      .from(payments)
+      .where(and(eq(payments.id, paymentId), eq(payments.clientId, clientId)))
+      .limit(1);
+
+    if (!payment) throw new NotFoundException('платёж не найден');
+    if (payment.provider !== 'direct') {
+      throw new BadRequestException(
+        'подтверждать вручную можно только прямой перевод: остальные закрывает сам провайдер',
+      );
+    }
+    if (payment.status !== 'pending') {
+      throw new BadRequestException(`платёж уже в статусе ${payment.status}`);
+    }
+
+    const now = new Date();
+    const [updated] = await this.db
+      .update(payments)
+      .set({
+        status: 'succeeded',
+        confirmedBy: 'client',
+        confirmedAt: now,
+        updatedAt: now,
+      })
+      .where(and(eq(payments.id, paymentId), eq(payments.status, 'pending')))
+      .returning({ id: payments.id, status: payments.status });
+
+    if (!updated) throw new BadRequestException('платёж уже подтверждён');
+    return { id: updated.id, status: updated.status, confirmedBy: 'client', confirmedAt: now };
   }
 
   async deactivatePaymentAccount(clientId: string, accountId: string) {

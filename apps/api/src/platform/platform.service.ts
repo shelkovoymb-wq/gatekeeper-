@@ -194,14 +194,24 @@ export class PlatformService {
     let created = 0;
     let updated = 0;
     for (const c of rows) {
+      // Оборот делим по тому, чем закрыт платёж. Провайдерский подтверждён
+      // подписью вебхука либо встречным запросом в API магазина; прямой
+      // перевод закрывает сам клиент кнопкой «деньги получены», и его цифра —
+      // со слов. Комиссия берётся с общего оборота, но владельцу видно, какая
+      // часть на чьём слове держится, и он может её оспорить.
       const [agg] = await this.db
-        .select({ turnover: sql<string>`coalesce(sum(${payments.amount}), 0)` })
+        .select({
+          turnover: sql<string>`coalesce(sum(${payments.amount}), 0)`,
+          selfReported: sql<string>`coalesce(sum(${payments.amount})
+              filter (where ${payments.confirmedBy} = 'client'), 0)`,
+        })
         .from(payments)
         .where(
           sql`${payments.clientId} = ${c.id} and ${payments.status} = 'succeeded'
               and ${payments.createdAt} >= ${start} and ${payments.createdAt} < ${end}`,
         );
       const turnover = Number(agg?.turnover ?? 0);
+      const selfReported = Number(agg?.selfReported ?? 0);
       const pct = Number(c.commissionPct ?? 0);
       const subscription = Number(c.priceMonth ?? 0);
       const commission = Math.round(((turnover * pct) / 100) * 100) / 100;
@@ -212,6 +222,9 @@ export class PlatformService {
         subscriptionAmount: subscription,
         commissionPct: pct,
         turnoverBase: turnover,
+        // Из них подтверждено самим клиентом, а не провайдером.
+        turnoverSelfReported: selfReported,
+        turnoverProviderVerified: Math.round((turnover - selfReported) * 100) / 100,
         commissionAmount: commission,
         currency: c.currency,
       };
