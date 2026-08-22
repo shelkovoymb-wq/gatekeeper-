@@ -578,9 +578,11 @@ export class CabinetService {
       clientId,
       accountType,
       isActive: true,
-      // Подтверждает реквизиты платформа, а не сам клиент: verified здесь —
-      // разрешение принимать деньги, выдавать его себе самому нельзя.
-      verificationStatus: 'pending',
+      // Предварительного одобрения платформой больше нет: реквизиты работают
+      // сразу. Колонка осталась ради старых записей и сервис-токенной ручки,
+      // но приём денег она не гейтит — это делает is_active, который владелец
+      // может снять в любой момент.
+      verificationStatus: 'not_required',
       ...ACCOUNT_COLUMNS[accountType](str),
     } satisfies typeof directPaymentAccounts.$inferInsert;
 

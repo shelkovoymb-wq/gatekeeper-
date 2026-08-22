@@ -34,6 +34,23 @@ export class PlatformController {
     return this.platform.overview();
   }
 
+  /** Реквизиты всех клиентов: куда через платформу уходят деньги подписчиков. */
+  @Get('client-payment-accounts')
+  clientPaymentAccounts(@Auth() auth: AuthContext) {
+    assertOwner(auth);
+    return this.platform.listClientPaymentAccounts();
+  }
+
+  @Post('client-payment-accounts/:id/toggle')
+  toggleClientAccount(
+    @Auth() auth: AuthContext,
+    @Param('id') id: string,
+    @Body() dto: { isActive?: boolean },
+  ) {
+    assertOwner(auth);
+    return this.platform.setClientAccountActive(id, dto?.isActive !== false);
+  }
+
   /** Детальная статистика по клиентам, каналам и платежам за период. */
   @Get('analytics')
   analyticsReport(

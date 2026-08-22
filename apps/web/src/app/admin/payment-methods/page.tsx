@@ -7,8 +7,6 @@ import {
   ACCOUNT_FORMS,
   describeAccount,
   formOf,
-  verificationBadge,
-  verificationLabel,
   type PaymentAccount,
 } from '@/lib/payment-accounts'
 import { type PayCfg } from '@/lib/payment-providers'
@@ -80,7 +78,7 @@ export default function PaymentMethodsPage() {
       if (!r.success) setMsg({ type: 'err', text: r.error || 'Не удалось добавить реквизиты' })
       else {
         setValues({})
-        setMsg({ type: 'ok', text: 'Реквизиты добавлены, отправлены на проверку' })
+        setMsg({ type: 'ok', text: 'Реквизиты добавлены и уже принимают переводы' })
       }
     })
 
@@ -91,7 +89,7 @@ export default function PaymentMethodsPage() {
 
   const activeCount =
     providers.filter((p) => p.configured && p.isActive).length +
-    accounts.filter((a) => a.isActive && a.verificationStatus === 'verified').length
+    accounts.filter((a) => a.isActive).length
 
   return (
     <div className="space-y-8">
@@ -144,8 +142,8 @@ export default function PaymentMethodsPage() {
         <div className="rounded-sm bg-ledger-page p-6 text-ledger-ink shadow-[4px_6px_0_0_rgba(0,0,0,0.25)]">
           <h3 className="font-display text-base">Добавить реквизиты</h3>
           <p className="mt-1 text-sm text-ledger-ink/55">
-            Номер карты целиком не принимаем — только последние 4 цифры. Новые реквизиты уходят на
-            проверку платформой; принимать переводы на них можно после подтверждения.
+            Номер карты целиком не принимаем — только последние 4 цифры. Реквизиты начинают
+            работать сразу после добавления.
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -199,7 +197,7 @@ export default function PaymentMethodsPage() {
                 <tr className="border-b border-ledger-page/15 bg-ledger-cover font-ledger-mono text-xs uppercase tracking-wide text-ledger-brass">
                   <th className="px-5 py-3 font-medium">Тип</th>
                   <th className="px-5 py-3 font-medium">Реквизиты</th>
-                  <th className="px-5 py-3 font-medium">Проверка</th>
+                  <th className="px-5 py-3 font-medium">Состояние</th>
                   <th className="px-5 py-3 font-medium">Добавлены</th>
                   <th className="px-5 py-3 font-medium">Действия</th>
                 </tr>
@@ -221,11 +219,12 @@ export default function PaymentMethodsPage() {
                       <td className="px-5 py-3">
                         <span
                           className={`rounded-sm px-2 py-1 font-ledger-mono text-xs font-medium ${
-                            verificationBadge[a.verificationStatus] ??
-                            'bg-ledger-ink/10 text-ledger-ink/60'
+                            a.isActive
+                              ? 'bg-emerald-500/10 text-emerald-700'
+                              : 'bg-ledger-ink/10 text-ledger-ink/50'
                           }`}
                         >
-                          {verificationLabel[a.verificationStatus] ?? a.verificationStatus}
+                          {a.isActive ? 'принимают' : 'выключены'}
                         </span>
                       </td>
                       <td className="px-5 py-3 text-ledger-ink/60">{formatDate(a.createdAt)}</td>

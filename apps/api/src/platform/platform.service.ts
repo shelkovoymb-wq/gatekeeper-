@@ -5,11 +5,13 @@ import {
   bots,
   channels,
   clients,
+  directPaymentAccounts,
   payments,
   platformInvoices,
   platformPlans,
   subscriptions,
 } from '../db/schema.js';
+import { maskAccountNumber, cardLast4 } from '../payments/account-types.js';
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -173,6 +175,67 @@ export class PlatformService {
    * Оборот = сумма succeeded-платежей клиента с created_at в периоде.
    * Существующий счёт периода обновляется, если он ещё не оплачен.
    */
+  /**
+   * Реквизиты всех клиентов — то, куда через платформу уходят деньги
+   * подписчиков.
+   *
+   * Предварительного одобрения тут нет: реквизиты начинают работать сразу,
+   * как клиент их завёл. Этот список — контроль по факту: владелец видит, кто
+   * и куда принимает, и может выключить любые реквизиты, после чего
+   * инициировать по ним платёж уже нельзя.
+   */
+  async listClientPaymentAccounts() {
+    const rows = await this.db
+      .select({
+        id: directPaymentAccounts.id,
+        clientId: directPaymentAccounts.clientId,
+        clientName: clients.name,
+        accountType: directPaymentAccounts.accountType,
+        bankName: directPaymentAccounts.bankName,
+        accountNumber: directPaymentAccounts.accountNumber,
+        cardNumberMasked: directPaymentAccounts.cardNumberMasked,
+        cardHolder: directPaymentAccounts.cardHolder,
+        phoneForSbp: directPaymentAccounts.phoneForSbp,
+        email: directPaymentAccounts.email,
+        cryptoAddress: directPaymentAccounts.cryptoAddress,
+        cryptoType: directPaymentAccounts.cryptoType,
+        isActive: directPaymentAccounts.isActive,
+        createdAt: directPaymentAccounts.createdAt,
+      })
+      .from(directPaymentAccounts)
+      .innerJoin(clients, eq(clients.id, directPaymentAccounts.clientId))
+      .orderBy(sql`${directPaymentAccounts.createdAt} desc`);
+
+    return rows.map((r) => ({
+      id: r.id,
+      clientId: r.clientId,
+      clientName: r.clientName,
+      accountType: r.accountType,
+      bankName: r.bankName,
+      accountNumber: maskAccountNumber(r.accountNumber),
+      cardLast4: cardLast4(r.cardNumberMasked),
+      cardHolder: r.cardHolder,
+      phoneSbp: r.phoneForSbp,
+      paypalEmail: r.email,
+      cryptoAddress: r.cryptoAddress,
+      cryptoType: r.cryptoType,
+      isActive: r.isActive,
+      createdAt: r.createdAt,
+    }));
+  }
+
+  /** Выключить/включить реквизиты клиента. Выключенные приём денег не проходят. */
+  async setClientAccountActive(accountId: string, isActive: boolean) {
+    const [updated] = await this.db
+      .update(directPaymentAccounts)
+      .set({ isActive, updatedAt: new Date() })
+      .where(eq(directPaymentAccounts.id, accountId))
+      .returning({ id: directPaymentAccounts.id, isActive: directPaymentAccounts.isActive });
+
+    if (!updated) throw new NotFoundException('реквизиты не найдены');
+    return updated;
+  }
+
   async generateInvoices(period?: { start?: string; end?: string }) {
     const { start, end } =
       period?.start && period?.end
