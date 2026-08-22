@@ -6,6 +6,8 @@ import { DbModule } from '../db/db.module.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
+import { OAuthService } from './oauth/oauth.service.js';
+import { TwoFactorService } from './two-factor.service.js';
 
 @Module({
   imports: [
@@ -21,7 +23,7 @@ import { JwtAuthGuard } from './jwt-auth.guard.js';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard],
-  exports: [AuthService, JwtAuthGuard, JwtModule],
+  providers: [AuthService, JwtAuthGuard, TwoFactorService, OAuthService],
+  exports: [AuthService, JwtAuthGuard, JwtModule, TwoFactorService, OAuthService],
 })
 export class AuthModule {}

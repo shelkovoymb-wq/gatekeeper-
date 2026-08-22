@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ChangePassword } from '@/components/ChangePassword'
+import { ConnectedAccounts } from '@/components/ConnectedAccounts'
+import { TwoFactorSettings } from '@/components/TwoFactorSettings'
+import { PROVIDER_LABELS, parseProvider } from '@/lib/oauth'
 
 interface Bot {
   id: string
@@ -11,18 +14,38 @@ interface Bot {
 }
 export default function SettingsPage() {
   const [bots, setBots] = useState<Bot[]>([])
+  const [hasPassword, setHasPassword] = useState(true)
   const [token, setToken] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
   const load = useCallback(async () => {
-    const b = await fetch('/api/bots').then((r) => r.json())
+    const [b, me] = await Promise.all([
+      fetch('/api/bots').then((r) => r.json()),
+      fetch('/api/auth/me').then((r) => r.json()),
+    ])
     setBots(Array.isArray(b?.data) ? b.data : [])
+    // У аккаунта, заведённого через Google/Яндекс, пароля ещё нет — форма
+    // отключения 2FA должна спрашивать код, а не пароль.
+    if (me?.success) setHasPassword(me.data?.hasPassword !== false)
   }, [])
 
   useEffect(() => {
     load()
   }, [load])
+
+  // Результат возврата с OAuth-редиректа приходит в query. Читаем через
+  // location, а не useSearchParams: страница остаётся без границы Suspense.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
+    const linked = parseProvider(q.get('linked') ?? '')
+    const error = q.get('error')
+    if (linked) setMsg({ type: 'ok', text: `${PROVIDER_LABELS[linked]} привязан` })
+    else if (error) setMsg({ type: 'err', text: error })
+    if (linked || error) {
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
 
   const connectBot = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -118,7 +141,9 @@ export default function SettingsPage() {
         </p>
       </section>
 
-      <ChangePassword />
+      <TwoFactorSettings hasPassword={hasPassword} />
+      <ConnectedAccounts />
+      <ChangePassword hasPassword={hasPassword} />
     </div>
   )
 }

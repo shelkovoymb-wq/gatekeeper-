@@ -2,8 +2,12 @@
 
 import { useState } from 'react'
 
-/** Форма смены собственного пароля (для владельца и клиента). */
-export function ChangePassword() {
+/**
+ * Форма смены собственного пароля (для владельца и клиента).
+ * `hasPassword=false` — аккаунт заведён через Google/Яндекс, пароля ещё нет:
+ * это первичная установка, текущий пароль спрашивать не у чего.
+ */
+export function ChangePassword({ hasPassword = true }: { hasPassword?: boolean }) {
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [repeat, setRepeat] = useState('')
@@ -30,7 +34,7 @@ export function ChangePassword() {
       })
       const d = await r.json()
       if (!r.ok || !d.success) throw new Error(d.error || 'Ошибка')
-      setMsg({ type: 'ok', text: 'Пароль изменён' })
+      setMsg({ type: 'ok', text: hasPassword ? 'Пароль изменён' : 'Пароль установлен' })
       setCurrent('')
       setNext('')
       setRepeat('')
@@ -46,7 +50,15 @@ export function ChangePassword() {
 
   return (
     <section className="rounded-sm bg-ledger-page p-6 text-ledger-ink shadow-[4px_6px_0_0_rgba(0,0,0,0.25)]">
-      <h2 className="mb-4 font-display text-lg text-ledger-ink">Смена пароля</h2>
+      <h2 className="mb-4 font-display text-lg text-ledger-ink">
+        {hasPassword ? 'Смена пароля' : 'Установка пароля'}
+      </h2>
+      {!hasPassword && (
+        <p className="mb-4 max-w-md text-sm text-ledger-ink/65">
+          Вход в этот аккаунт сейчас возможен только через привязанный сервис. Задайте пароль, чтобы
+          иметь запасной способ войти.
+        </p>
+      )}
       {msg && (
         <div
           className={`mb-4 rounded-sm px-4 py-2.5 text-sm ${
@@ -59,14 +71,16 @@ export function ChangePassword() {
         </div>
       )}
       <form onSubmit={submit} className="max-w-md space-y-3">
-        <input
-          type="password"
-          autoComplete="current-password"
-          placeholder="Текущий пароль"
-          value={current}
-          onChange={(e) => setCurrent(e.target.value)}
-          className={inputCls}
-        />
+        {hasPassword && (
+          <input
+            type="password"
+            autoComplete="current-password"
+            placeholder="Текущий пароль"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+            className={inputCls}
+          />
+        )}
         <input
           type="password"
           autoComplete="new-password"
@@ -85,10 +99,10 @@ export function ChangePassword() {
         />
         <button
           type="submit"
-          disabled={busy || !current || !next}
+          disabled={busy || (hasPassword && !current) || !next}
           className="rounded-sm bg-ledger-stamp px-5 py-2.5 text-sm font-bold text-ledger-page hover:brightness-110 disabled:opacity-50"
         >
-          {busy ? 'Сохранение…' : 'Сменить пароль'}
+          {busy ? 'Сохранение…' : hasPassword ? 'Сменить пароль' : 'Установить пароль'}
         </button>
       </form>
     </section>
