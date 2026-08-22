@@ -3,24 +3,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { StatsTile } from '@/components/StatsTile'
 import { formatMoney, formatNumber, formatDate } from '@/lib/format'
-
-interface PaymentAccount {
-  id: string
-  accountType: string
-  bankName: string | null
-  accountNumber: string | null
-  bic: string | null
-  inn: string | null
-  phoneSbp: string | null
-  paypalEmail: string | null
-  cryptoAddress: string | null
-  cryptoType: string | null
-  cardLast4: string | null
-  cardHolder: string | null
-  isActive: boolean
-  verificationStatus: string
-  createdAt: string
-}
+import {
+  ACCOUNT_FORMS,
+  describeAccount,
+  formOf,
+  verificationBadge,
+  verificationLabel,
+  type PaymentAccount,
+} from '@/lib/payment-accounts'
 
 interface Payout {
   id: string
@@ -42,71 +32,12 @@ interface Stats {
   totalAmount: number
 }
 
-/** Поля, которые имеет смысл спрашивать под каждый тип реквизитов. */
-const ACCOUNT_FORMS: { type: string; label: string; icon: string; fields: { key: string; label: string }[] }[] = [
-  {
-    type: 'bank_account',
-    label: 'Банковский счёт',
-    icon: '🏦',
-    fields: [
-      { key: 'bankName', label: 'Банк' },
-      { key: 'accountNumber', label: 'Номер счёта' },
-      { key: 'bic', label: 'БИК' },
-      { key: 'inn', label: 'ИНН' },
-    ],
-  },
-  {
-    type: 'card',
-    label: 'Карта',
-    icon: '💳',
-    fields: [
-      { key: 'cardLast4', label: 'Последние 4 цифры' },
-      { key: 'cardHolder', label: 'Держатель' },
-    ],
-  },
-  { type: 'sbp', label: 'СБП', icon: '⚡', fields: [{ key: 'phoneSbp', label: 'Телефон (+7…)' }] },
-  { type: 'paypal', label: 'PayPal', icon: '🌐', fields: [{ key: 'paypalEmail', label: 'Email' }] },
-  {
-    type: 'crypto',
-    label: 'Криптовалюта',
-    icon: '₿',
-    fields: [
-      { key: 'cryptoAddress', label: 'Адрес кошелька' },
-      { key: 'cryptoType', label: 'Сеть (btc / eth / usdt)' },
-    ],
-  },
-]
-
-const verificationBadge: Record<string, string> = {
-  verified: 'bg-emerald-500/10 text-emerald-700',
-  pending: 'bg-amber-500/10 text-amber-700',
-  rejected: 'bg-danger/10 text-red-700',
-}
-
 const payoutBadge: Record<string, string> = {
   completed: 'bg-emerald-500/10 text-emerald-700',
   processing: 'bg-sky-500/10 text-sky-700',
   pending: 'bg-amber-500/10 text-amber-700',
   failed: 'bg-danger/10 text-red-700',
   cancelled: 'bg-ledger-ink/10 text-ledger-ink/50',
-}
-
-/** Человекочитаемая сводка реквизитов — номер счёта приходит уже маскированным. */
-function describeAccount(a: PaymentAccount): string {
-  switch (a.accountType) {
-    case 'bank_account':
-      return [a.bankName, a.accountNumber].filter(Boolean).join(' · ') || '—'
-    case 'card':
-      return [a.cardLast4 ? `•••• ${a.cardLast4}` : null, a.cardHolder].filter(Boolean).join(' · ') || '—'
-    case 'sbp':
-      return a.phoneSbp || '—'
-    case 'paypal':
-      return a.paypalEmail || '—'
-    case 'crypto':
-      return [a.cryptoAddress, a.cryptoType?.toUpperCase()].filter(Boolean).join(' · ') || '—'
-    default:
-      return '—'
-  }
 }
 
 export default function OwnerPayoutsPage() {
@@ -143,7 +74,7 @@ export default function OwnerPayoutsPage() {
     load()
   }, [load])
 
-  const activeForm = ACCOUNT_FORMS.find((f) => f.type === formType)!
+  const activeForm = ACCOUNT_FORMS.find((f) => f.type === formType) ?? ACCOUNT_FORMS[0]
 
   const addAccount = async () => {
     setBusy(true)
@@ -276,7 +207,7 @@ export default function OwnerPayoutsPage() {
             </thead>
             <tbody className="divide-y divide-ledger-ink/10 bg-ledger-page">
               {accounts.map((a) => {
-                const meta = ACCOUNT_FORMS.find((f) => f.type === a.accountType)
+                const meta = formOf(a.accountType)
                 return (
                   <tr key={a.id} className={`transition-colors hover:bg-ledger-ink/5 ${a.isActive ? '' : 'opacity-45'}`}>
                     <td className="px-5 py-3 font-bold text-ledger-ink">
@@ -289,7 +220,7 @@ export default function OwnerPayoutsPage() {
                           verificationBadge[a.verificationStatus] ?? 'bg-ledger-ink/10 text-ledger-ink/60'
                         }`}
                       >
-                        {a.verificationStatus}
+                        {verificationLabel[a.verificationStatus] ?? a.verificationStatus}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-ledger-ink/60">{formatDate(a.createdAt)}</td>
