@@ -11,8 +11,10 @@ import { RobokassaProvider } from './providers/robokassa.provider.js';
 import { ProdamusProvider } from './providers/prodamus.provider.js';
 import { DirectTransferProvider } from './providers/direct-transfer.provider.js';
 import { ProviderCredentials } from './provider-credentials.js';
+import { FulfillmentModule } from '../storefront/fulfillment.module.js';
 
 @Module({
+  imports: [FulfillmentModule],
   controllers: [PaymentsController, PaymentAccountsController, PaymentConfigController],
   providers: [
     PaymentsService,

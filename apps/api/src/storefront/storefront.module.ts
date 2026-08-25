@@ -1,13 +1,12 @@
 import { Module } from '@nestjs/common';
 import { TelegramCoreModule } from '../telegram/telegram-core.module.js';
-import { SubscribersModule } from '../subscribers/subscribers.module.js';
-import { SubscriptionsModule } from '../subscriptions/subscriptions.module.js';
-import { FulfillmentService } from './fulfillment.service.js';
+import { PaymentsModule } from '../payments/payments.module.js';
+import { FulfillmentModule } from './fulfillment.module.js';
 import { StorefrontService } from './storefront.service.js';
 
 @Module({
-  imports: [TelegramCoreModule, SubscribersModule, SubscriptionsModule],
-  providers: [FulfillmentService, StorefrontService],
-  exports: [StorefrontService, FulfillmentService],
+  imports: [TelegramCoreModule, FulfillmentModule, PaymentsModule],
+  providers: [StorefrontService],
+  exports: [StorefrontService],
 })
 export class StorefrontModule {}

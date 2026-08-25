@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import {
   PaymentStatus,
   type PaymentProviderAdapter,
+  type PaymentInstruction,
   type PaymentRequest,
   type PaymentWebhook,
   type WebhookVerifyContext,
@@ -28,7 +29,9 @@ export class DirectTransferProvider implements PaymentProviderAdapter {
    * Платёж создаётся с статусом PENDING и ждёт ручного подтверждения
    * или вебхука от банка.
    */
-  async initiate(request: PaymentRequest): Promise<{ url: string | null; paymentId: string }> {
+  async initiate(
+    request: PaymentRequest,
+  ): Promise<{ url: string | null; paymentId: string; instruction: PaymentInstruction }> {
     // Реквизиты получателя (клиента, который продаёт доступ).
     //
     // Условие ровно одно — is_active. Предварительной проверки платформой тут
@@ -67,8 +70,10 @@ export class DirectTransferProvider implements PaymentProviderAdapter {
     // прямой платёж от другого в подтверждении, и он уезжает плательщику.
     const paymentId = `dir_${randomUUID()}`;
 
-    // Формируем инструкцию для платежа (не отправляем ссылку, т.к. платёж вне платформы)
-    const paymentInstruction = {
+    // Инструкция уезжает вызывающему (витрине бота) и показывается плательщику:
+    // без неё он не знает, куда переводить. Раньше она тут собиралась и
+    // выбрасывалась — наружу возвращались только url и paymentId.
+    const paymentInstruction: PaymentInstruction = {
       amount: (request.amount / 100).toFixed(2),
       currency: request.currency || 'RUB',
       accountType: account.accountType,
@@ -93,7 +98,6 @@ export class DirectTransferProvider implements PaymentProviderAdapter {
         cryptoAddress: account.cryptoAddress,
         cryptoType: account.cryptoType,
       }),
-      description: request.description,
       orderId: paymentId,
     };
 
@@ -102,6 +106,7 @@ export class DirectTransferProvider implements PaymentProviderAdapter {
     );
 
     return {
+      instruction: paymentInstruction,
       url: null, // Нет URL перенаправления - платёж происходит вне платформы
       paymentId,
     };
