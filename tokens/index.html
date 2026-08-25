@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Расход токенов Claude Code</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme: dark;
+  --bg:#0f0f0e;
+  --surface-1:#1a1a19;
+  --surface-2:#232322;
+  --line:#2f2f2d;
+  --text-primary:#ffffff;
+  --text-secondary:#c3c2b7;
+  --text-muted:#8d8c83;
+
+  /* Валидированные слоты (dataviz, dark, surface #1a1a19) */
+  --s1:#3987e5;  /* blue   */
+  --s2:#d95926;  /* orange */
+  --s3:#199e70;  /* aqua   */
+  --s4:#c98500;  /* yellow */
+  --s5:#d55181;  /* magenta*/
+  --s6:#008300;  /* green  */
+  --s-manual:#3987e5;
+  --s-auto:#184f95;   /* тот же синий, тёмный шаг: «тёмная часть столбика» */
+  --radius:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg);
+  color:var(--text-primary);
+  font-family:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:14px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,.num{font-family:"Space Grotesk","Inter",sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 64px}
+
+/* ---------- шапка ---------- */
+.head{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-content:space-between;margin-bottom:8px}
+h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0}
+.sub{color:var(--text-muted);font-size:13px;margin-top:4px}
+.periods{display:flex;gap:4px;background:var(--surface-1);border:1px solid var(--line);border-radius:10px;padding:4px}
+.periods button{
+  font:inherit;font-weight:500;color:var(--text-secondary);background:transparent;
+  border:0;border-radius:7px;padding:6px 14px;cursor:pointer;white-space:nowrap;
+}
+.periods button:hover{color:var(--text-primary);background:var(--surface-2)}
+.periods button[aria-pressed="true"]{background:var(--s1);color:#fff}
+.periods:empty{display:none}   /* до загрузки данных кнопок ещё нет */
+
+.disclaimer{
+  margin:18px 0 22px;padding:11px 14px;border:1px solid var(--line);
+  border-left:3px solid var(--s4);border-radius:8px;background:var(--surface-1);
+  color:var(--text-secondary);font-size:13px;
+}
+
+/* ---------- карточки ---------- */
+.card{background:var(--surface-1);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;margin-bottom:18px}
+.card h2{font-size:15px;font-weight:500;letter-spacing:.01em;margin:0 0 2px;color:var(--text-primary)}
+.card .hint{color:var(--text-muted);font-size:12px;margin:0 0 16px}
+
+/* ---------- полоса итогов ---------- */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px}
+.tile{background:var(--surface-1);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+.tile .k{color:var(--text-muted);font-size:12px;margin-bottom:6px}
+.tile .v{font-family:"Space Grotesk",sans-serif;font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.tile .x{color:var(--text-muted);font-size:12px;margin-top:4px}
+
+/* ---------- дневной график ---------- */
+.legend{display:flex;flex-wrap:wrap;gap:14px;margin:0 0 14px;font-size:12px;color:var(--text-secondary)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.swatch{width:10px;height:10px;border-radius:3px;flex:none}
+.days{display:flex;align-items:flex-end;gap:2px;height:190px}
+.day{flex:1 1 0;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:flex-end;position:relative;cursor:default;padding-top:2px}
+.day .stack{display:flex;flex-direction:column;justify-content:flex-end;height:100%;gap:2px}
+.day .seg{border-radius:4px 4px 0 0;min-height:0}
+.day .seg.auto{background:var(--s-auto);border-radius:0}
+.day .seg.manual{background:var(--s-manual)}
+.day.first-of-period .stack{box-shadow:none}
+.day.outside{opacity:.34}
+.day:hover .seg{filter:brightness(1.18)}
+.day.empty::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--line);border-radius:2px}
+.dayaxis{display:flex;gap:2px;margin-top:8px;font-size:11px;color:var(--text-muted)}
+.dayaxis div{flex:1 1 0;min-width:0;text-align:center;overflow:hidden;white-space:nowrap}
+
+/* ---------- разрезы долями ---------- */
+.splits{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
+.share{display:flex;height:26px;border-radius:6px;overflow:hidden;gap:2px;background:var(--surface-2)}
+.share > div{min-width:2px;position:relative}
+.share > div:first-child{border-radius:6px 0 0 6px}
+.share > div:last-child{border-radius:0 6px 6px 0}
+.sharekeys{margin-top:12px;display:flex;flex-direction:column;gap:7px;font-size:13px}
+.sharekeys .row{display:flex;align-items:center;gap:8px}
+.sharekeys .name{color:var(--text-secondary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sharekeys .val{color:var(--text-primary);font-variant-numeric:tabular-nums}
+.sharekeys .pct{color:var(--text-muted);width:46px;text-align:right;font-variant-numeric:tabular-nums}
+
+/* ---------- таблица проектов ---------- */
+table{width:100%;border-collapse:collapse}
+th{
+  text-align:left;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--text-muted);padding:0 10px 10px;border-bottom:1px solid var(--line);white-space:nowrap;
+}
+th.r,td.r{text-align:right}
+td{padding:10px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr.prow{cursor:pointer}
+tr.prow:hover td{background:var(--surface-2)}
+.pname{display:flex;align-items:center;gap:9px;font-weight:500}
+.caret{color:var(--text-muted);font-size:10px;width:9px;flex:none;transition:transform .12s ease}
+tr.prow[aria-expanded="true"] .caret{transform:rotate(90deg)}
+.pmeter{position:relative;min-width:130px}
+.pmeter .bar{position:absolute;left:10px;right:10px;bottom:2px;height:3px;background:var(--surface-2);border-radius:2px}
+.pmeter .bar i{position:absolute;left:0;top:0;bottom:0;background:var(--s1);border-radius:2px}
+.nums{font-variant-numeric:tabular-nums;white-space:nowrap}
+.muted{color:var(--text-muted)}
+.detail td{background:#151514;padding:0}
+.detail .inner{padding:16px 20px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:22px}
+.detail h3{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin:0 0 10px}
+.detail ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:13px}
+.detail li{display:flex;gap:10px;align-items:center}
+.detail li .name{flex:1;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.detail li .val{color:var(--text-primary);font-variant-numeric:tabular-nums}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--surface-2);padding:2px 6px;border-radius:5px;font-size:12px}
+
+/* ---------- тултип ---------- */
+#tip{
+  position:fixed;z-index:50;pointer-events:none;opacity:0;transition:opacity .1s ease;
+  background:#0b0b0a;border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+  font-size:12.5px;line-height:1.55;min-width:170px;box-shadow:0 10px 30px rgba(0,0,0,.55);
+}
+#tip .t{font-family:"Space Grotesk",sans-serif;font-weight:500;margin-bottom:6px}
+#tip .r{display:flex;justify-content:space-between;gap:16px}
+#tip .r span:last-child{font-variant-numeric:tabular-nums}
+#tip .r.dim span{color:var(--text-muted)}
+
+footer{color:var(--text-muted);font-size:12.5px;line-height:1.7;margin-top:26px;border-top:1px solid var(--line);padding-top:18px}
+footer b{color:var(--text-secondary);font-weight:500}
+.err{border-left-color:var(--s2)}
+.spark{display:block}
+@media (max-width:640px){
+  .wrap{padding:20px 14px 48px}
+  h1{font-size:22px}
+  .days{height:150px}
+  th.hide,td.hide{display:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="head">
+    <div>
+      <h1>Расход токенов Claude Code</h1>
+      <div class="sub" id="generated">загружаю data/tokens.json…</div>
+    </div>
+    <div class="periods" id="periods" role="group" aria-label="Период"></div>
+  </div>
+
+  <div class="disclaimer" id="disclaimer">
+    Работа идёт по подписке — <b>эти суммы не списываются</b>. Это оценка по публичному прайсу API,
+    нужная только чтобы сравнивать проекты между собой; множители на кэш — в сноске внизу.
+  </div>
+
+  <div id="app" hidden>
+    <div class="tiles" id="tiles"></div>
+
+    <section class="card">
+      <h2>По дням</h2>
+      <p class="hint">Высота столбика — все токены за день. Тёмная часть — автоматика (headless-запуски).
+        Дни вне выбранного периода приглушены. <span id="daymax"></span></p>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--s-manual)"></i>руками</span>
+        <span><i class="swatch" style="background:var(--s-auto)"></i>автоматика</span>
+      </div>
+      <div class="days" id="days"></div>
+      <div class="dayaxis" id="dayaxis"></div>
+    </section>
+
+    <div class="splits">
+      <section class="card">
+        <h2>По моделям</h2>
+        <p class="hint">Доля токенов за период</p>
+        <div class="share" id="share-models"></div>
+        <div class="sharekeys" id="keys-models"></div>
+      </section>
+      <section class="card">
+        <h2>Кто жёг</h2>
+        <p class="hint">Живая сессия против headless-запусков</p>
+        <div class="share" id="share-kinds"></div>
+        <div class="sharekeys" id="keys-kinds"></div>
+      </section>
+      <section class="card">
+        <h2>Поток</h2>
+        <p class="hint">Основной диалог против подагентов</p>
+        <div class="share" id="share-flows"></div>
+        <div class="sharekeys" id="keys-flows"></div>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2>Проекты</h2>
+      <p class="hint">Клик по строке — топ подпапок, модели и состав контекста. Привязка к проекту — эвристика (см. сноску).</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Проект</th>
+            <th class="hide">Динамика</th>
+            <th class="r">Токены</th>
+            <th class="r hide">Оценка $</th>
+            <th class="r hide">Запросы</th>
+          </tr>
+        </thead>
+        <tbody id="projects"></tbody>
+      </table>
+    </section>
+
+    <footer id="footnote"></footer>
+  </div>
+</div>
+
+<div id="tip" role="tooltip"></div>
+
+<script>
+(() => {
+"use strict";
+
+const SERIES = ["--s1","--s2","--s3","--s4","--s5","--s6"];
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const PALETTE = SERIES.map(cssVar);
+const C_MANUAL = cssVar("--s-manual"), C_AUTO = cssVar("--s-auto"), C_AQUA = cssVar("--s3");
+
+const nf = new Intl.NumberFormat("ru-RU");
+const nf1 = new Intl.NumberFormat("ru-RU", {maximumFractionDigits:1});
+const nf2 = new Intl.NumberFormat("ru-RU", {minimumFractionDigits:2, maximumFractionDigits:2});
+const nfx = new Intl.NumberFormat("ru-RU", {maximumFractionDigits:2});
+
+function compact(n){
+  n = Number(n) || 0;
+  if (n >= 1e9) return nf1.format(n/1e9) + " млрд";
+  if (n >= 1e6) return nf1.format(n/1e6) + " млн";
+  if (n >= 1e3) return nf1.format(n/1e3) + " тыс";
+  return nf.format(n);
+}
+function money(v){
+  v = Number(v) || 0;
+  if (v >= 1000) return "$" + nf.format(Math.round(v));
+  if (v >= 1) return "$" + nf2.format(v);
+  return v > 0 ? "$" + nf2.format(v) : "$0";
+}
+function pct(v){ return nf1.format((Number(v)||0) * 100) + "%"; }
+function dayLabel(iso){
+  const [y,m,d] = iso.split("-").map(Number);
+  return new Date(y, m-1, d).toLocaleDateString("ru-RU", {day:"numeric", month:"short"});
+}
+function fullDay(iso){
+  const [y,m,d] = iso.split("-").map(Number);
+  return new Date(y, m-1, d).toLocaleDateString("ru-RU", {day:"numeric", month:"long", weekday:"short"});
+}
+const el = (tag, cls, text) => {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+};
+
+// ---------- тултип ----------
+const tip = document.getElementById("tip");
+function showTip(html, evt){
+  tip.innerHTML = html;
+  tip.style.opacity = "1";
+  moveTip(evt);
+}
+function moveTip(evt){
+  const pad = 14, r = tip.getBoundingClientRect();
+  let x = evt.clientX + pad, y = evt.clientY + pad;
+  if (x + r.width > innerWidth - 8) x = evt.clientX - r.width - pad;
+  if (y + r.height > innerHeight - 8) y = evt.clientY - r.height - pad;
+  tip.style.left = Math.max(8, x) + "px";
+  tip.style.top = Math.max(8, y) + "px";
+}
+function hideTip(){ tip.style.opacity = "0"; }
+function tipRow(k, v, dim){
+  return `<div class="r${dim ? " dim" : ""}"><span>${k}</span><span>${v}</span></div>`;
+}
+
+// ---------- состояние ----------
+let DATA = null;
+let PERIOD = "30";   // перезаписывается из DATA.periods при загрузке
+const expanded = new Set();
+
+fetch("data/tokens.json", {cache:"no-store"})
+  .then(r => { if (!r.ok) throw new Error(r.status + ""); return r.json(); })
+  .then(d => { DATA = d; boot(); })
+  .catch(() => {
+    const box = document.getElementById("disclaimer");
+    box.className = "disclaimer err";
+    box.innerHTML = 'Нет файла <code>data/tokens.json</code>. Собери его:<br>' +
+      '<code>python3 tokens/build_tokens.py</code><br>' +
+      'и открой страницу через статический сервер: <code>cd tokens &amp;&amp; python3 -m http.server</code>';
+    document.getElementById("generated").textContent = "данные не загружены";
+  });
+
+function boot(){
+  document.getElementById("app").hidden = false;
+  document.getElementById("generated").textContent =
+    "собрано " + new Date(DATA.generated_at).toLocaleString("ru-RU", {dateStyle:"medium", timeStyle:"short"}) +
+    " · история с " + (DATA.meta.history_from ? dayLabel(DATA.meta.history_from) : "—");
+
+  // Кнопки строятся из DATA.periods: добавить период — правка только в Python.
+  const box = document.getElementById("periods");
+  PERIOD = DATA.periods[DATA.periods.length - 1];
+  for (const period of DATA.periods){
+    const btn = el("button","",periodTitle(period));
+    btn.type = "button";
+    btn.dataset.period = period;
+    btn.setAttribute("aria-pressed", String(period === PERIOD));
+    btn.addEventListener("click", () => {
+      PERIOD = period;
+      box.querySelectorAll("button").forEach(b =>
+        b.setAttribute("aria-pressed", String(b === btn)));
+      render();   // чисто клиентский переключатель, повторных запросов нет
+    });
+    box.append(btn);
+  }
+
+  renderDays();
+  renderFootnote();
+  render();
+}
+
+function periodTitle(period){
+  const n = Number(period);
+  const last = n % 10, tens = n % 100;
+  const word = (last === 1 && tens !== 11) ? "день"
+             : (last >= 2 && last <= 4 && (tens < 12 || tens > 14)) ? "дня" : "дней";
+  return n + " " + word;
+}
+function periodDays(){ return Math.min(Number(PERIOD), DATA.dates.length); }
+function periodSlice(arr){ return arr.slice(arr.length - periodDays()); }
+
+function render(){
+  const t = DATA.totals[PERIOD];
+  renderTiles(t);
+  renderShare("models", t.models);
+  renderShare("kinds", t.kinds);
+  renderShare("flows", t.flows);
+  markDays();
+  renderProjects();
+}
+
+// ---------- полоса итогов ----------
+function renderTiles(t){
+  const days = periodDays();
+  const perDay = days > 1 ? " · " + compact(Math.round(t.tokens / days)) + "/день" : "";
+  const tiles = [
+    ["Токены", compact(t.tokens), nf.format(t.tokens) + perDay],
+    ["Оценка", money(t.cost), t.unpriced_tokens ? "на " + compact(t.unpriced_tokens) + " токенов цены нет" : "по прайсу API"],
+    ["Запросы", nf.format(t.calls), t.calls ? compact(Math.round(t.tokens / t.calls)) + " токенов на запрос" : "—"],
+    ["Сессии", nf.format(t.sessions), "файлов транскриптов"],
+    ["Проекты", nf.format(t.projects), "с ненулевым расходом"],
+    ["Доля кэша", pct(t.cache_share), "чтений кэша во входе"]
+  ];
+  const box = document.getElementById("tiles");
+  box.textContent = "";
+  for (const [k,v,x] of tiles){
+    const tile = el("div","tile");
+    tile.append(el("div","k",k), el("div","v",v), el("div","x",x));
+    box.append(tile);
+  }
+}
+
+// ---------- график по дням ----------
+function renderDays(){
+  const box = document.getElementById("days");
+  const axis = document.getElementById("dayaxis");
+  box.textContent = ""; axis.textContent = "";
+  const max = Math.max(1, ...DATA.daily.map(d => d.tokens));
+  document.getElementById("daymax").textContent = "Потолок шкалы — " + compact(max) + " токенов.";
+
+  DATA.daily.forEach((d, i) => {
+    const col = el("div","day" + (d.tokens ? "" : " empty"));
+    col.dataset.i = String(i);
+    const h = d.tokens / max * 100;
+    const stack = el("div","stack");
+    const autoShare = d.tokens ? d.auto / d.tokens : 0;
+    if (d.tokens > 0){
+      const manual = el("div","seg manual");
+      manual.style.height = (h * (1 - autoShare)) + "%";
+      const auto = el("div","seg auto");
+      auto.style.height = (h * autoShare) + "%";
+      if (autoShare > 0) stack.append(manual, auto); else stack.append(manual);
+    }
+    col.append(stack);
+    col.addEventListener("mouseenter", e => showTip(dayTip(d), e));
+    col.addEventListener("mousemove", moveTip);
+    col.addEventListener("mouseleave", hideTip);
+    box.append(col);
+
+    const lab = el("div","", (i % 5 === 0 || i === DATA.daily.length - 1) ? dayLabel(d.date) : "");
+    axis.append(lab);
+  });
+}
+function dayTip(d){
+  return `<div class="t">${fullDay(d.date)}</div>` +
+    tipRow("Токены", compact(d.tokens)) +
+    tipRow("Оценка", money(d.cost)) +
+    tipRow("Запросы", nf.format(d.calls)) +
+    tipRow("Сессии", nf.format(d.sessions)) +
+    tipRow("Руками", compact(d.manual), true) +
+    tipRow("Автоматика", compact(d.auto), true) +
+    (d.top_project ? tipRow("Топ-проект", d.top_project, true) : "");
+}
+function markDays(){
+  const from = DATA.daily.length - periodDays();
+  document.querySelectorAll("#days .day").forEach(col => {
+    col.classList.toggle("outside", Number(col.dataset.i) < from);
+  });
+}
+
+// ---------- разрезы долями ----------
+function renderShare(name, items){
+  const bar = document.getElementById("share-" + name);
+  const keys = document.getElementById("keys-" + name);
+  bar.textContent = ""; keys.textContent = "";
+  const total = items.reduce((s,i) => s + i.tokens, 0);
+  if (!total){
+    keys.append(el("div","muted","нет данных за период"));
+    return;
+  }
+  items.forEach((item, idx) => {
+    const color = colorFor(name, item.key, idx);
+    const label = item.label || item.key;
+    const seg = el("div");
+    seg.style.width = (item.tokens / total * 100) + "%";
+    seg.style.background = color;
+    seg.addEventListener("mouseenter", e => showTip(
+      `<div class="t">${label}</div>` +
+      tipRow("Токены", compact(item.tokens)) +
+      tipRow("Доля", pct(item.tokens / total)) +
+      tipRow("Оценка", money(item.cost), true), e));
+    seg.addEventListener("mousemove", moveTip);
+    seg.addEventListener("mouseleave", hideTip);
+    bar.append(seg);
+
+    const row = el("div","row");
+    const sw = el("i","swatch"); sw.style.background = color;
+    row.append(sw, el("div","name",label),
+      el("div","val",compact(item.tokens)),
+      el("div","pct",pct(item.tokens / total)));
+    keys.append(row);
+  });
+}
+function colorFor(group, key, idx){
+  // Ключи машинные (auto/subagent), а не русские подписи: переименование
+  // подписи в Python не должно молча схлопывать цвета.
+  if (group === "kinds") return key === "auto" ? C_AUTO : C_MANUAL;
+  if (group === "flows") return key === "subagent" ? C_AQUA : C_MANUAL;
+  return PALETTE[idx % PALETTE.length];
+}
+
+// ---------- проекты ----------
+function renderProjects(){
+  const body = document.getElementById("projects");
+  body.textContent = "";
+  const rows = DATA.projects
+    .map(p => ({p, m: p.periods[PERIOD]}))
+    .filter(r => r.m.tokens > 0)
+    .sort((a,b) => b.m.tokens - a.m.tokens);
+
+  if (!rows.length){
+    const tr = el("tr");
+    const td = el("td","muted","За выбранный период расхода не было.");
+    td.colSpan = 5;
+    tr.append(td); body.append(tr);
+    return;
+  }
+  const max = rows[0].m.tokens;
+
+  for (const {p, m} of rows){
+    const tr = el("tr","prow");
+    tr.setAttribute("aria-expanded", String(expanded.has(p.key)));
+
+    const name = el("td");
+    const wrap = el("div","pname");
+    wrap.append(el("span","caret","▶"), el("span","",p.label));
+    name.append(wrap);
+    name.append(el("div","muted","последний день: " + (p.last_day ? dayLabel(p.last_day) : "—")));
+
+    const spark = el("td","hide");
+    spark.append(sparkline(periodSlice(p.series)));
+
+    const tok = el("td","r pmeter nums");
+    tok.append(el("div","",compact(m.tokens)));
+    tok.append(el("div","muted", pct(m.tokens / max) + " от макс."));
+    const bar = el("div","bar"); const fill = el("i");
+    fill.style.width = (m.tokens / max * 100) + "%";
+    bar.append(fill); tok.append(bar);
+
+    const cost = el("td","r nums hide", money(m.cost));
+    if (m.unpriced_tokens) cost.title = "часть токенов без цены: " + nf.format(m.unpriced_tokens);
+    const calls = el("td","r nums hide", nf.format(m.calls));
+
+    tr.append(name, spark, tok, cost, calls);
+
+    const drow = el("tr","detail");
+    const dcell = el("td"); dcell.colSpan = 5;
+    dcell.append(detail(m));
+    drow.append(dcell);
+    drow.hidden = !expanded.has(p.key);
+
+    tr.addEventListener("click", () => {
+      const open = !drow.hidden;
+      drow.hidden = open;
+      tr.setAttribute("aria-expanded", String(!open));
+      if (open) expanded.delete(p.key); else expanded.add(p.key);
+    });
+
+    body.append(tr, drow);
+  }
+}
+
+function detail(m){
+  const inner = el("div","inner");
+  inner.append(list("Топ подпапок", m.subpaths.length
+    ? m.subpaths.map(s => [s.key, nf.format(s.touches) + " касаний"])
+    : [["путей не нашлось", "—"]]));
+  inner.append(list("Модели", m.models.map(x => [x.label || x.key, compact(x.tokens)])));
+  inner.append(list("Из чего собран контекст", [
+    ["свежий ввод", compact(m.input)],
+    ["чтение кэша", compact(m.cache_read)],
+    ["запись кэша", compact(m.cache_write)],
+    ["ответы модели", compact(m.output)]
+  ]));
+  const meta = el("div");
+  meta.append(el("h3","","Итого за период"));
+  const ul = el("ul");
+  for (const [k,v] of [["оценка", money(m.cost)], ["запросы", nf.format(m.calls)],
+                       ["сессии", nf.format(m.sessions)], ["доля кэша", pct(m.cache_share)]]){
+    const li = el("li"); li.append(el("span","name",k), el("span","val",v)); ul.append(li);
+  }
+  meta.append(ul);
+  inner.append(meta);
+  return inner;
+}
+function list(title, pairs){
+  const box = el("div");
+  box.append(el("h3","",title));
+  const ul = el("ul");
+  for (const [k,v] of pairs){
+    const li = el("li");
+    li.append(el("span","name",k), el("span","val",v));
+    ul.append(li);
+  }
+  box.append(ul);
+  return box;
+}
+
+function sparkline(series){
+  const w = 120, h = 26, n = series.length, max = Math.max(1, ...series);
+  const svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.setAttribute("width", w); svg.setAttribute("height", h);
+  svg.setAttribute("class","spark"); svg.setAttribute("aria-hidden","true");
+  const gap = n > 40 ? 0.5 : 1.5;
+  const bw = Math.max(1, (w - gap * (n - 1)) / n);
+  series.forEach((v, i) => {
+    const bh = v > 0 ? Math.max(1.5, v / max * h) : 0;
+    if (!bh) return;
+    const r = document.createElementNS("http://www.w3.org/2000/svg","rect");
+    r.setAttribute("x", (i * (bw + gap)).toFixed(2));
+    r.setAttribute("y", (h - bh).toFixed(2));
+    r.setAttribute("width", bw.toFixed(2));
+    r.setAttribute("height", bh.toFixed(2));
+    r.setAttribute("rx", Math.min(1.5, bw / 2).toFixed(2));
+    r.setAttribute("fill", C_MANUAL);
+    svg.append(r);
+  });
+  return svg;
+}
+
+// ---------- сноска ----------
+function renderFootnote(){
+  const m = DATA.meta, ix = m.index;
+  document.getElementById("footnote").innerHTML =
+    "<b>Как считается привязка к проекту.</b> Это эвристика с точностью до проекта, а не бухгалтерия. " +
+    "Из каждого вызова инструментов достаются пути; аргументам <code>file_path</code>/<code>path</code>/" +
+    "<code>notebook_path</code> доверия больше, чем случайной строке внутри bash-команды. Имя берётся, " +
+    "только если такая папка реально существует в " + (ix.projects_home ? "<code>" + ix.projects_home + "</code>" : "домашней папке проектов") +
+    " (" + nf.format(ix.known_projects) + " шт.). Событие без путей наследует проект предыдущего события в той же сессии, " +
+    "поэтому сессия-обсуждение без единого файла целиком уедет в проект последнего касания. Если за весь файл " +
+    "проект не нашёлся ни разу — всё уходит в бакет «(без привязки)».<br>" +
+    "<b>Индекс.</b> " + nf.format(ix.files_total) + " файлов транскриптов (в этот раз перечитано " +
+    nf.format(ix.files_scanned) + ", из кэша " + nf.format(ix.files_cached) + "), сборка " +
+    nf1.format(ix.seconds) + " с. Кэш агрегатов: <code>" + ix.cache_path + "</code>, retention " +
+    nf.format(ix.retention_days) + " дней. Глубина истории: с " +
+    (m.history_from ? fullDay(m.history_from) : "—") + ", окно витрины — " + nf.format(DATA.dates.length) + " дней.<br>" +
+    "<b>Деньги.</b> " + m.note + " Множители на кэш: чтение ×" + nfx.format(m.cache_multipliers.read) +
+    ", запись на 5 минут ×" + nfx.format(m.cache_multipliers.write_5m) + ", на час ×" +
+    nfx.format(m.cache_multipliers.write_1h) + ". Токены незнакомых моделей считаются, но помечаются как «цены нет».";
+}
+})();
+</script>
+</body>
+</html>
