@@ -17,6 +17,12 @@ interface FulfillInput {
   /** Реально списанная сумма в единицах провайдера (для метаданных). */
   rawAmount?: number;
   rawCurrency?: string;
+  /**
+   * Платёж уже лежит в payments (создан при инициации, закрыт вебхуком).
+   * Тогда новую строку не пишем — иначе оборот и комиссия удвоятся, — а
+   * привязываем существующую к выданной подписке.
+   */
+  alreadyRecorded?: boolean;
 }
 
 @Injectable()
@@ -66,26 +72,33 @@ export class FulfillmentService {
       actor: 'payment',
     });
 
-    // Платёж в выручку (идемпотентно по provider+providerPaymentId).
-    await this.db
-      .insert(payments)
-      .values({
-        clientId: pc.plan.clientId,
-        subscriptionId: sub.id,
-        subscriberId: subscriber.id,
-        provider: input.provider,
-        providerPaymentId: input.providerPaymentId,
-        amount: String(pc.plan.price),
-        currency: pc.plan.currency,
-        status: 'succeeded',
-        kind: 'purchase',
-        metadata: {
-          rawAmount: input.rawAmount ?? null,
-          rawCurrency: input.rawCurrency ?? null,
-          planId: input.planId,
-        },
-      })
-      .onConflictDoNothing();
+    if (input.alreadyRecorded) {
+      await this.db
+        .update(payments)
+        .set({ subscriptionId: sub.id, subscriberId: subscriber.id, updatedAt: new Date() })
+        .where(eq(payments.providerPaymentId, input.providerPaymentId));
+    } else {
+      // Платёж в выручку (идемпотентно по provider+providerPaymentId).
+      await this.db
+        .insert(payments)
+        .values({
+          clientId: pc.plan.clientId,
+          subscriptionId: sub.id,
+          subscriberId: subscriber.id,
+          provider: input.provider,
+          providerPaymentId: input.providerPaymentId,
+          amount: String(pc.plan.price),
+          currency: pc.plan.currency,
+          status: 'succeeded',
+          kind: 'purchase',
+          metadata: {
+            rawAmount: input.rawAmount ?? null,
+            rawCurrency: input.rawCurrency ?? null,
+            planId: input.planId,
+          },
+        })
+        .onConflictDoNothing();
+    }
 
     await this.sendAccessLinks(input.botId, input.tgUserId, input.planId, pc.channels, {
       alreadyActive: false,

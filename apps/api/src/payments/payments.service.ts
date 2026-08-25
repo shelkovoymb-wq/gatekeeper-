@@ -20,6 +20,7 @@ import { CloudPaymentsProvider } from './providers/cloudpayments.provider.js';
 import { RobokassaProvider } from './providers/robokassa.provider.js';
 import { ProdamusProvider } from './providers/prodamus.provider.js';
 import { DirectTransferProvider } from './providers/direct-transfer.provider.js';
+import { FulfillmentService } from '../storefront/fulfillment.service.js';
 
 @Injectable()
 export class PaymentsService {
@@ -34,6 +35,7 @@ export class PaymentsService {
     robokassaProvider: RobokassaProvider,
     prodamusProvider: ProdamusProvider,
     directTransferProvider: DirectTransferProvider,
+    private readonly fulfillment: FulfillmentService,
   ) {
     this.providers = new Map<string, PaymentProviderAdapter>([
       ['stars', starsProvider],
@@ -56,7 +58,7 @@ export class PaymentsService {
       );
     }
 
-    const { url, paymentId } = await provider.initiate(request);
+    const { url, paymentId, instruction } = await provider.initiate(request);
 
     await this.db.insert(payments).values({
       clientId: request.clientId,
@@ -64,7 +66,11 @@ export class PaymentsService {
       subscriberId: request.subscriberId ?? null,
       provider: request.provider,
       providerPaymentId: paymentId,
-      amount: String(request.amount),
+      // request.amount — в копейках (все провайдеры делят его на 100), а
+      // payments.amount читается как рубли: из него считается оборот и
+      // комиссия в счёте платформы. Без деления здесь комиссия выходила
+      // в сто раз больше реальной.
+      amount: (request.amount / 100).toFixed(2),
       currency: request.currency || 'RUB',
       status: PaymentStatus.PENDING,
       metadata: request.metadata ?? {},
@@ -73,7 +79,7 @@ export class PaymentsService {
     this.logger.log(
       `Payment initiated: ${paymentId} (${request.provider}) for subscription ${request.subscriptionId ?? '-'}`,
     );
-    return { paymentId, url, status: PaymentStatus.PENDING };
+    return { paymentId, url, instruction, status: PaymentStatus.PENDING };
   }
 
   async handleWebhook(providerName: string, ctx: WebhookVerifyContext) {
@@ -115,7 +121,57 @@ export class PaymentsService {
     this.logger.log(
       `Payment ${webhook.status}: ${webhook.providerPaymentId} from ${providerName}`,
     );
+
+    // Успешный платёж должен открыть доступ. Раньше вебхук только менял статус:
+    // подписчик платил через ЮKassa, платёж становился succeeded — и на этом
+    // всё, подписки он не получал. Данные для выдачи кладутся в metadata при
+    // инициации (витриной бота); у платежей из n8n их нет, и тогда выдачей
+    // занимается вызывающая сторона.
+    if (webhook.status === PaymentStatus.SUCCEEDED) {
+      await this.grantAccess(payment.id, webhook.providerPaymentId, payment.metadata);
+    }
+
     return { id: payment.id, status: webhook.status, updatedAt: new Date() };
+  }
+
+  /**
+   * Выдать доступ по оплаченному платежу.
+   *
+   * Витрина бота кладёт в metadata всё нужное для выдачи: кто купил (botId,
+   * tgUserId) и что купил (planId). Если этих полей нет — платёж пришёл из
+   * n8n или другого места, где подписку заводят самостоятельно, и трогать её
+   * тут не надо.
+   */
+  private async grantAccess(
+    paymentRowId: string,
+    providerPaymentId: string,
+    metadata: unknown,
+  ): Promise<void> {
+    const meta = (metadata ?? {}) as Record<string, unknown>;
+    const botId = typeof meta.botId === 'string' ? meta.botId : null;
+    const planId = typeof meta.planId === 'string' ? meta.planId : null;
+    const tgUserId = typeof meta.tgUserId === 'number' ? meta.tgUserId : null;
+
+    if (!botId || !planId || !tgUserId) return;
+
+    try {
+      await this.fulfillment.fulfill({
+        botId,
+        tgUserId,
+        username: typeof meta.username === 'string' ? meta.username : null,
+        firstName: typeof meta.firstName === 'string' ? meta.firstName : null,
+        planId,
+        provider: 'external',
+        providerPaymentId,
+        alreadyRecorded: true,
+      });
+      this.logger.log(`Access granted for payment ${paymentRowId} (plan ${planId})`);
+    } catch (e) {
+      // Доступ не выдался, но деньги приняты — это не повод отдавать провайдеру
+      // ошибку: он начнёт повторять вебхук. Пишем в лог, статус остаётся
+      // succeeded, разобраться можно вручную.
+      this.logger.error(`Failed to grant access for payment ${paymentRowId}: ${String(e)}`);
+    }
   }
 
   async getPayment(paymentId: string) {

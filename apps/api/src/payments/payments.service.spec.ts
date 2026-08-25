@@ -17,12 +17,14 @@ describe('PaymentsService', () => {
   let service: PaymentsService;
   let fake: FakeDb;
   let yookassa: ReturnType<typeof stubProvider>;
+  let fulfillment: { fulfill: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     const created = createFakeDb();
     fake = created.fake;
     yookassa = stubProvider('yk_123', 'https://yookassa.ru/checkout');
 
+    fulfillment = { fulfill: vi.fn().mockResolvedValue(undefined) };
     service = new PaymentsService(
       created.db,
       stubProvider('stars_123', null) as never,
@@ -31,6 +33,7 @@ describe('PaymentsService', () => {
       stubProvider('rb_123', 'https://robokassa.ru') as never,
       stubProvider('pd_123', 'https://prodamus.ru') as never,
       stubProvider('dt_123', null) as never,
+      fulfillment as never,
     );
   });
 
@@ -51,21 +54,24 @@ describe('PaymentsService', () => {
       const result = await service.initiatePayment(request);
 
       expect(yookassa.initiate).toHaveBeenCalledWith(request);
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         paymentId: 'yk_123',
         url: 'https://yookassa.ru/checkout',
         status: PaymentStatus.PENDING,
       });
     });
 
-    it('сохраняет платёж как pending с суммой строкой (numeric-колонка)', async () => {
+    it('сохраняет платёж как pending, переводя копейки в рубли', async () => {
       fake.queue([]);
 
       await service.initiatePayment(request);
 
       const [values] = fake.argsOf('values') as [Record<string, unknown>];
       expect(values.status).toBe(PaymentStatus.PENDING);
-      expect(values.amount).toBe('99900');
+      // request.amount = 99900 копеек. В payments.amount кладём рубли: из этой
+      // колонки считается оборот и комиссия в счёте платформы, и без деления
+      // комиссия выходила в сто раз больше реальной.
+      expect(values.amount).toBe('999.00');
       expect(values.provider).toBe('yookassa');
       expect(values.providerPaymentId).toBe('yk_123');
     });
