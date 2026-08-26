@@ -96,6 +96,13 @@ export class CabinetController {
     return this.cabinet.refundPayment(clientIdOf(auth), paymentId, dto?.amount, dto?.reason);
   }
 
+  /** Часовой пояс клиента: браузер сообщает его сам, чтобы «в 10:00» значило десять утра у клиента. */
+  @Put('timezone')
+  setTimezone(@Auth() auth: AuthContext, @Body() dto: { timezone?: string }) {
+    if (!dto?.timezone) throw new BadRequestException('часовой пояс обязателен');
+    return this.cabinet.setTimezone(clientIdOf(auth), dto.timezone);
+  }
+
   /** Все способы получения денег одним списком: платёжные системы + свои реквизиты. */
   @Get('payment-methods')
   listPaymentMethods(@Auth() auth: AuthContext) {

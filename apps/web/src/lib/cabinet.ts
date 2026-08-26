@@ -64,6 +64,27 @@ export async function cabinetSend<T = unknown>(
   return (await parse(res)) as T
 }
 
+/**
+ * Проброс multipart-загрузки на бэкенд как есть.
+ *
+ * Тело пересылается байт в байт вместе с исходным Content-Type: пересобирать
+ * FormData здесь нельзя — потеряется граница multipart, а вместе с ней и файл.
+ */
+export async function cabinetUpload<T = unknown>(
+  path: string,
+  body: ArrayBuffer,
+  contentType: string,
+): Promise<T> {
+  const token = await sessionToken()
+  const res = await fetch(`${BACKEND_URL}${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType },
+    body,
+    cache: 'no-store',
+  })
+  return (await parse(res)) as T
+}
+
 // Публичные (без токена) вызовы auth-эндпоинтов бэкенда.
 export async function backendAuth<T = unknown>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BACKEND_URL}${path}`, {

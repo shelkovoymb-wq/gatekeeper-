@@ -56,6 +56,9 @@ export const clients = pgTable(
       .references(() => platformPlans.id),
     planStatus: text('plan_status').notNull().default('trialing'),
     planPaidUntil: timestamp('plan_paid_until', { withTimezone: true }),
+    // Пояс берётся из браузера клиента и нужен отложенной публикации: время
+    // назначается в его часах, а хранится в UTC.
+    timezone: text('timezone'),
     settings: jsonb('settings').notNull().default(sql`'{}'::jsonb`),
     createdAt: nowDefault(),
   },
@@ -466,3 +469,141 @@ export const ownerPayoutEvents = pgTable('owner_payout_events', {
   details: jsonb('details').notNull().default(sql`'{}'::jsonb`),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ─── ПЛАТНЫЕ ОПЦИИ ────────────────────────────────────────────────────────────
+
+/** Каталог опций: цена и период в данных, чтобы следующая добавлялась строкой. */
+export const addons = pgTable('addons', {
+  code: text('code').primaryKey(), // posting
+  name: text('name').notNull(),
+  description: text('description'),
+  priceMonth: numeric('price_month', { precision: 12, scale: 2 }).notNull().default('0'),
+  currency: text('currency').notNull().default('RUB'),
+  periodDays: integer('period_days').notNull().default(31),
+  paymentUrl: text('payment_url'),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: nowDefault(),
+});
+
+/**
+ * Подписка клиента на опцию. Статусы ровно из скилла prodamus-subscription:
+ * free | trial | active | past_due | expired. У past_due отсрочки нет —
+ * доступ ровно до expires_at.
+ */
+export const clientAddons = pgTable(
+  'client_addons',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id),
+    addonCode: text('addon_code')
+      .notNull()
+      .references(() => addons.code),
+    status: text('status').notNull().default('expired'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    gatewaySubscriptionId: text('gateway_subscription_id'),
+    billingEmail: text('billing_email'),
+    billingPhone: text('billing_phone'),
+    createdAt: nowDefault(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    uniq: uniqueIndex('client_addons_uniq').on(t.clientId, t.addonCode),
+  }),
+);
+
+/**
+ * Журнал ВСЕХ событий шлюза, включая неверные подписи и ненайденных клиентов:
+ * без него жалобу «я оплатил, доступа нет» разбирать нечем.
+ * UNIQUE на eventKey — замок идемпотентности, шлюзы ретраят часами.
+ */
+export const paymentEvents = pgTable(
+  'payment_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    eventKey: text('event_key').notNull(),
+    clientId: uuid('client_id').references(() => clients.id),
+    addonCode: text('addon_code'),
+    eventType: text('event_type').notNull(),
+    amount: numeric('amount', { precision: 12, scale: 2 }),
+    currency: text('currency'),
+    signature: text('signature'),
+    rawPayload: jsonb('raw_payload').notNull().default(sql`'{}'::jsonb`),
+    createdAt: nowDefault(),
+  },
+  (t) => ({
+    uniqKey: uniqueIndex('payment_events_event_key_key').on(t.eventKey),
+    byClient: index('payment_events_client_idx').on(t.clientId, t.createdAt),
+  }),
+);
+
+// ─── ПОСТЫ ────────────────────────────────────────────────────────────────────
+
+/** bodyHtml уже в разметке Telegram: sendMessage шлётся с parse_mode=HTML. */
+export const posts = pgTable(
+  'posts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id),
+    bodyHtml: text('body_html').notNull().default(''),
+    status: text('status').notNull().default('draft'), // draft|scheduled|publishing|published|failed
+    publishAt: timestamp('publish_at', { withTimezone: true }),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    error: text('error'),
+    disablePreview: boolean('disable_preview').notNull().default(false),
+    createdAt: nowDefault(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    byClient: index('posts_client_idx').on(t.clientId, t.createdAt),
+    bySchedule: index('posts_schedule_idx').on(t.status, t.publishAt),
+  }),
+);
+
+/** messageId хранится с первого дня: без него не отредактировать и не удалить. */
+export const postTargets = pgTable(
+  'post_targets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    postId: uuid('post_id')
+      .notNull()
+      .references(() => posts.id, { onDelete: 'cascade' }),
+    channelId: uuid('channel_id')
+      .notNull()
+      .references(() => channels.id),
+    messageId: bigint('message_id', { mode: 'number' }),
+    error: text('error'),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+  },
+  (t) => ({
+    uniq: uniqueIndex('post_targets_uniq').on(t.postId, t.channelId),
+  }),
+);
+
+/**
+ * Вложение живёт у нас на диске (storagePath) до первой отправки: file_id в
+ * Telegram появляется только после отправки в конкретный чат. После первой
+ * успешной публикации остаётся file_id, а файл с диска удаляется.
+ */
+export const postMedia = pgTable(
+  'post_media',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    postId: uuid('post_id')
+      .notNull()
+      .references(() => posts.id, { onDelete: 'cascade' }),
+    mediaType: text('media_type').notNull(), // photo|video|document
+    fileId: text('file_id'),
+    storagePath: text('storage_path'),
+    fileName: text('file_name'),
+    fileSize: bigint('file_size', { mode: 'number' }),
+    position: integer('position').notNull().default(0),
+    createdAt: nowDefault(),
+  },
+  (t) => ({
+    byPost: index('post_media_post_idx').on(t.postId, t.position),
+  }),
+);

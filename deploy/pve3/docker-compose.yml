@@ -50,6 +50,12 @@ services:
     environment:
       DATABASE_URL: postgres://gatekeeper:${POSTGRES_PASSWORD:-gatekeeper}@postgres:5432/gatekeeper
       REDIS_URL: redis://redis:6379
+      UPLOADS_DIR: /data/uploads
+    volumes:
+      # Вложения постов до первой отправки в Telegram. Том, а не память
+      # контейнера: пост могут запланировать на неделю вперёд, а контейнер
+      # переживёт не один рестарт за это время.
+      - uploads:/data/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,6 +97,7 @@ services:
 volumes:
   pgdata:
   redisdata:
+  uploads:
 
 networks:
   internal:

@@ -36,6 +36,18 @@ const schema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_BASE_URL: z.string().url().default('https://api.anthropic.com/v1'),
   ANTHROPIC_MODEL: z.string().default('claude-3-5-haiku-latest'),
+
+  // Платные опции платформы (аддоны). Это ДРУГИЕ деньги, чем платежи
+  // подписчиков клиентам: здесь клиент платит платформе за опцию, и шлюз тут
+  // один — наш собственный кабинет Продамуса.
+  // Без ключа вебхук опций отвечает 503 и ничего не активирует: принимать
+  // непроверенные деньги хуже, чем не принимать их вовсе.
+  ADDON_PAYMENT_SECRET: z.string().optional(),
+  // Ниже этой суммы не активируем — защита от поддельного вебхука на 1 ₽.
+  MIN_ADDON_AMOUNT: z.coerce.number().default(100),
+
+  // Куда складывать вложения постов до первой отправки в Telegram.
+  UPLOADS_DIR: z.string().default('/data/uploads'),
 });
 
 export type Env = z.infer<typeof schema>;
