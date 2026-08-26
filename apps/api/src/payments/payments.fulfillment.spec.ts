@@ -52,10 +52,11 @@ describe('PaymentsService — выдача доступа после вебху�
 
   beforeEach(() => buildService());
 
-  const paymentRow = (metadata: unknown) => ({
+  const paymentRow = (metadata: unknown, status = 'pending') => ({
     id: 'row-1',
     provider: 'yookassa',
     providerPaymentId: 'yk_777',
+    status,
     metadata,
   });
 
@@ -117,6 +118,28 @@ describe('PaymentsService — выдача доступа после вебху�
       expect(fulfillment.fulfill).not.toHaveBeenCalled();
     },
   );
+
+  it('повторная доставка вебхука не выдаёт доступ второй раз', async () => {
+    // Шлюзы ретраят часами. Платёж уже succeeded — значит доступ выдан на
+    // первой доставке; повтор не должен продлевать подписку ещё на период.
+    fake.queue([paymentRow(storefrontMeta, 'succeeded')], []);
+
+    await service.handleWebhook('yookassa', CTX);
+
+    expect(fulfillment.fulfill).not.toHaveBeenCalled();
+  });
+
+  it('не затирает metadata витрины данными вебхука', async () => {
+    // В metadata лежат botId/planId/tgUserId — по ним выдаётся доступ. Затерев
+    // их, мы теряем связь платежа с покупателем навсегда.
+    fake.queue([paymentRow(storefrontMeta)], []);
+
+    await service.handleWebhook('yookassa', CTX);
+
+    const [patch] = fake.argsOf('set') as [{ metadata: Record<string, unknown> }];
+    expect(patch.metadata).toMatchObject(storefrontMeta);
+    expect(patch.metadata).toHaveProperty('webhook');
+  });
 
   it('падение выдачи не роняет обработку вебхука', async () => {
     fake.queue([paymentRow(storefrontMeta)], []);

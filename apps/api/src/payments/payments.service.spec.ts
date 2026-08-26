@@ -149,7 +149,8 @@ describe('PaymentsService', () => {
       expect(result).toMatchObject({ id: 'pay_1', status: PaymentStatus.SUCCEEDED });
       const [patch] = fake.argsOf('set') as [Record<string, unknown>];
       expect(patch.status).toBe(PaymentStatus.SUCCEEDED);
-      expect(patch.metadata).toEqual({ foo: 'bar' });
+      // Данные вебхука кладутся рядом с metadata витрины, а не вместо них.
+      expect(patch.metadata).toMatchObject({ webhook: { foo: 'bar' } });
     });
   });
 });
