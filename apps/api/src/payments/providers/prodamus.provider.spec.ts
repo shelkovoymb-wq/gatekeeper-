@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createHmac } from 'node:crypto';
+import { prodamusSignature } from './prodamus-signature.js';
 import { ProdamusProvider } from './prodamus.provider.js';
 import type { ProviderCredentials } from '../provider-credentials.js';
 import { PaymentStatus } from '../payment.types.js';
@@ -17,12 +17,10 @@ function stubCredentials(stored: Record<string, string>): ProviderCredentials {
 
 /** Тело вебхука + корректная подпись, как её считает Prodamus. */
 function signedWebhook(payload: Record<string, unknown>, secret = SECRET) {
-  const rawBody = Buffer.from(JSON.stringify(payload));
-  const signature = createHmac('sha256', secret).update(rawBody).digest('hex');
   return {
     body: payload,
-    rawBody,
-    headers: { 'x-prodamus-signature': signature },
+    rawBody: Buffer.from(JSON.stringify(payload)),
+    headers: { sign: prodamusSignature(secret, payload) },
   };
 }
 
@@ -55,7 +53,7 @@ describe('ProdamusProvider', () => {
 
     it('отвергает подделанную подпись', async () => {
       const ctx = signedWebhook(validPayload);
-      ctx.headers['x-prodamus-signature'] = 'a'.repeat(64);
+      ctx.headers.sign = 'a'.repeat(64);
 
       await expect(provider.verify(ctx as never)).rejects.toThrow(/signature mismatch/);
     });
@@ -68,23 +66,38 @@ describe('ProdamusProvider', () => {
     it('отвергает подменённое тело при валидной подписи от исходного', async () => {
       const ctx = signedWebhook(validPayload);
       // Подпись осталась от суммы 1500, а тело подменили на 999999.
-      ctx.rawBody = Buffer.from(JSON.stringify({ ...validPayload, amount: 999999 }));
+      ctx.body = { ...validPayload, amount: 999999 };
 
       await expect(provider.verify(ctx as never)).rejects.toThrow(/signature mismatch/);
     });
 
     it('отвергает вебхук без подписи', async () => {
       const ctx = signedWebhook(validPayload);
-      delete (ctx.headers as Record<string, unknown>)['x-prodamus-signature'];
+      delete (ctx.headers as Record<string, unknown>).sign;
 
       await expect(provider.verify(ctx as never)).rejects.toThrow(/missing signature/);
     });
 
-    it('отвергает вебхук без сырого тела — подпись не с чем сверить', async () => {
+    it('сырое тело для проверки не нужно: подпись считается по телу', async () => {
+      // Продамус подписывает канонический JSON, а не байты запроса, поэтому
+      // отсутствие rawBody проверке не мешает.
       const ctx = signedWebhook(validPayload);
       (ctx as { rawBody?: Buffer }).rawBody = undefined;
 
-      await expect(provider.verify(ctx as never)).rejects.toThrow(/missing signature or raw body/);
+      await expect(provider.verify(ctx as never)).resolves.toMatchObject({
+        provider: 'prodamus',
+      });
+    });
+
+    it('принимает подпись в запасном заголовке x-prodamus-signature', async () => {
+      const ctx = signedWebhook(validPayload);
+      const sig = ctx.headers.sign;
+      delete (ctx.headers as Record<string, unknown>).sign;
+      (ctx.headers as Record<string, unknown>)['x-prodamus-signature'] = sig;
+
+      await expect(provider.verify(ctx as never)).resolves.toMatchObject({
+        provider: 'prodamus',
+      });
     });
 
     it('не пытается проверять подпись без clientId в metadata', async () => {

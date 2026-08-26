@@ -113,9 +113,23 @@ export class PaymentsService {
       throw new NotFoundException(`Payment not found: ${webhook.providerPaymentId}`);
     }
 
+    // Шлюзы повторяют доставку часами, пока не получат 200. Замок — прежний
+    // статус платежа: доступ выдаём только на переходе в succeeded. Без него
+    // каждая повторная доставка продлевала бы подписку ещё на период
+    // (SubscriptionsService.grant считает от max(paidUntil, now) и про
+    // повторы ничего не знает).
+    const alreadySucceeded = payment.status === PaymentStatus.SUCCEEDED;
+
     await this.db
       .update(payments)
-      .set({ status: webhook.status, metadata: webhook.data, updatedAt: new Date() })
+      .set({
+        status: webhook.status,
+        // Данные вебхука кладём рядом, а не вместо: в metadata лежит то, что
+        // положила витрина (botId, planId, tgUserId), и по ним выдаётся
+        // доступ. Затирая их, мы теряли связь платежа с покупателем навсегда.
+        metadata: { ...((payment.metadata as Record<string, unknown>) ?? {}), webhook: webhook.data },
+        updatedAt: new Date(),
+      })
       .where(eq(payments.id, payment.id));
 
     this.logger.log(
@@ -127,7 +141,7 @@ export class PaymentsService {
     // всё, подписки он не получал. Данные для выдачи кладутся в metadata при
     // инициации (витриной бота); у платежей из n8n их нет, и тогда выдачей
     // занимается вызывающая сторона.
-    if (webhook.status === PaymentStatus.SUCCEEDED) {
+    if (webhook.status === PaymentStatus.SUCCEEDED && !alreadySucceeded) {
       await this.grantAccess(payment.id, webhook.providerPaymentId, payment.metadata);
     }
 

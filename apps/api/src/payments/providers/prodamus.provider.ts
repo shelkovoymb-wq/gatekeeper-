@@ -1,5 +1,5 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 import {
   PaymentStatus,
   type PaymentProviderAdapter,
@@ -8,6 +8,7 @@ import {
   type WebhookVerifyContext,
 } from '../payment.types.js';
 import { ProviderCredentials } from '../provider-credentials.js';
+import { prodamusSignature } from './prodamus-signature.js';
 
 @Injectable()
 export class ProdamusProvider implements PaymentProviderAdapter {
@@ -107,14 +108,20 @@ export class ProdamusProvider implements PaymentProviderAdapter {
       throw new Error(`Prodamus not configured for client ${clientId}`);
     }
 
-    const headerSig = ctx.headers['x-prodamus-signature'];
+    // Продамус кладёт подпись в заголовок Sign; регистр заголовков Node
+    // приводит к нижнему. x-prodamus-signature оставлен как запасной вариант.
+    const headerSig = ctx.headers['sign'] ?? ctx.headers['x-prodamus-signature'];
     const providedSig = Array.isArray(headerSig) ? headerSig[0] : headerSig;
 
-    if (!ctx.rawBody || !providedSig) {
-      throw new Error('prodamus webhook: missing signature or raw body');
+    if (!providedSig) {
+      throw new Error('prodamus webhook: missing signature');
     }
 
-    const expectedSig = createHmac('sha256', secretKey).update(ctx.rawBody).digest('hex');
+    // Подпись считается по КАНОНИЧЕСКОМУ JSON тела, а не по сырым байтам:
+    // шлюз собирает её PHP-сериализацией (сортировка ключей, скаляры строками,
+    // экранированные слеши). HMAC от rawBody не сошёлся бы никогда, то есть ни
+    // один настоящий платёж Продамуса не проходил проверку.
+    const expectedSig = prodamusSignature(secretKey, body);
     const a = Buffer.from(providedSig);
     const b = Buffer.from(expectedSig);
 
