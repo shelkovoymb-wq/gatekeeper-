@@ -6,7 +6,11 @@ WORKDIR /app
 # Не тянуть браузеры Playwright при установке (devDep) — иначе билд висит.
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
-RUN npm install -g pnpm
+# Версия закреплена и должна совпадать с полем packageManager в корневом
+# package.json. Без пина сюда приезжает свежий pnpm, а он проверяет
+# «идентичность пакетного менеджера» и падает на нашем lock-файле:
+# ERR_PNPM_PNPM_ENGINE_IDENTITY_UNVERIFIABLE (сломало сборку 27.08.2026).
+RUN npm install -g pnpm@9.12.0
 
 # Copy workspace files
 COPY pnpm-lock.yaml* pnpm-workspace.yaml package.json .npmrc* ./
@@ -32,7 +36,11 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-RUN npm install -g pnpm
+# Версия закреплена и должна совпадать с полем packageManager в корневом
+# package.json. Без пина сюда приезжает свежий pnpm, а он проверяет
+# «идентичность пакетного менеджера» и падает на нашем lock-файле:
+# ERR_PNPM_PNPM_ENGINE_IDENTITY_UNVERIFIABLE (сломало сборку 27.08.2026).
+RUN npm install -g pnpm@9.12.0
 
 # Забираем весь установленный и собранный /app из builder-стадии.
 COPY --from=builder /app ./
