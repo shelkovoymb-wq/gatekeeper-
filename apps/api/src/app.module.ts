@@ -27,6 +27,8 @@ import { PlatformModule } from './platform/platform.module.js'
 import { AssistantModule } from './assistant/assistant.module.js'
 import { OnboardingModule } from './onboarding/onboarding.module.js'
 import { OwnerModule } from './owner/owner.module.js'
+import { AddonsModule } from './addons/addons.module.js'
+import { PostsModule } from './posts/posts.module.js'
 
 /**
  * Корневой модуль. Фаза 1 (join-request flow): bots, channels, plans,
@@ -63,6 +65,8 @@ import { OwnerModule } from './owner/owner.module.js'
     AssistantModule,
     OnboardingModule,
     OwnerModule,
+    AddonsModule,
+    PostsModule,
     TelegramModule
   ],
   controllers: [AppController, HealthController],

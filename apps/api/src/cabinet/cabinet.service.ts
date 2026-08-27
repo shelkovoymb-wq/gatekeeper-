@@ -110,6 +110,20 @@ const ACCOUNT_COLUMNS: Record<PaymentAccountType, ColumnsFor> = {
   },
 };
 
+/**
+ * Проверка часового пояса силами самого Node: список зон живёт в ICU и
+ * обновляется вместе с ним, свой перечень пришлось бы вести руками.
+ */
+function isValidTimezone(tz: string): boolean {
+  if (!tz || typeof tz !== 'string' || tz.length > 64) return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 @Injectable()
 export class CabinetService {
   constructor(
@@ -485,6 +499,17 @@ export class CabinetService {
       .set({ platformPlanId: plan.id, planStatus: 'active' })
       .where(eq(clients.id, clientId));
     return { ok: true, planCode: plan.code };
+  }
+
+  /**
+   * Часовой пояс клиента. Берём его из браузера (Intl.DateTimeFormat) и
+   * храним, чтобы «опубликовать в 10:00» означало десять утра у клиента, а не
+   * у сервера. Само время публикации хранится в UTC.
+   */
+  async setTimezone(clientId: string, timezone: string) {
+    if (!isValidTimezone(timezone)) throw new BadRequestException('неизвестный часовой пояс');
+    await this.db.update(clients).set({ timezone }).where(eq(clients.id, clientId));
+    return { ok: true, timezone };
   }
 
   async setPayment(
