@@ -6,6 +6,7 @@ import { channels, channelMembers } from '../db/schema.js';
 import { TelegramService } from '../telegram/telegram.service.js';
 import { SubscribersService } from '../subscribers/subscribers.service.js';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
+import { DirectMembersService } from '../direct-members/direct-members.service.js';
 
 /**
  * Ядро контроля доступа: решает, впускать ли пользователя в канал, и отзывает
@@ -21,6 +22,7 @@ export class AccessService {
     private readonly tg: TelegramService,
     private readonly subscribers: SubscribersService,
     private readonly subs: SubscriptionsService,
+    private readonly direct: DirectMembersService,
   ) {}
 
   private async findChannel(botId: string, tgChatId: number) {
@@ -93,13 +95,27 @@ export class AccessService {
       const access = await this.subs.findAccessForChannel(subscriber.id, ch.id);
       await this.recordMember(ch.id, subscriber.id, access ? 'member' : 'unauthorized');
       if (!access) {
+        // Вход без подписки — это клиент завёл человека сам, взяв деньги
+        // напрямую. Мешать не мешаем: доступ его, деньги его. Но фиксируем —
+        // комиссию платформа возьмёт с такой продажи ту же, что и с платежа,
+        // прошедшего через неё.
+        //
+        // Админов и владельцев канала не считаем: это не продажа, а сам клиент
+        // и его люди.
+        if (status === 'member') {
+          await this.direct.record({
+            clientId: ch.clientId,
+            channelId: ch.id,
+            subscriberId: subscriber.id,
+          });
+        }
         this.logger.warn(
-          `UNAUTHORIZED join: user ${user.id} in channel ${ch.id} without active sub`,
+          `DIRECT join: user ${user.id} in channel ${ch.id} without active sub (status=${status})`,
         );
-        // TODO(phase1+): по политике клиента — авто-кик или пометка для ревью.
       }
     } else if (left) {
       await this.recordMember(ch.id, subscriber.id, status === 'kicked' ? 'kicked' : 'left');
+      await this.direct.markLeft(ch.id, subscriber.id);
     }
   }
 

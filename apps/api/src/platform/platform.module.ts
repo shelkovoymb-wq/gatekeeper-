@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
+import { DirectMembersModule } from '../direct-members/direct-members.module.js';
 import { PlatformController } from './platform.controller.js';
 import { PlatformService } from './platform.service.js';
 import { PlatformAnalyticsService } from './platform-analytics.service.js';
 import { BillingCron } from './billing.cron.js';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, DirectMembersModule],
   controllers: [PlatformController],
   providers: [PlatformService, PlatformAnalyticsService, BillingCron],
   exports: [PlatformService, PlatformAnalyticsService],

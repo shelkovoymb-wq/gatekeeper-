@@ -5,9 +5,10 @@ import { AccessWorker } from './access.worker.js';
 import { TelegramCoreModule } from '../telegram/telegram-core.module.js';
 import { SubscribersModule } from '../subscribers/subscribers.module.js';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module.js';
+import { DirectMembersModule } from '../direct-members/direct-members.module.js';
 
 @Module({
-  imports: [TelegramCoreModule, SubscribersModule, SubscriptionsModule],
+  imports: [TelegramCoreModule, SubscribersModule, SubscriptionsModule, DirectMembersModule],
   providers: [AccessService, AccessQueueProducer, AccessWorker],
   exports: [AccessService, AccessQueueProducer],
 })

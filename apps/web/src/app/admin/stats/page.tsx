@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { StatsTile } from '@/components/StatsTile'
 import { SetupChecklist } from '@/components/SetupChecklist'
+import { DirectMembersNotice } from '@/components/DirectMembersNotice'
 import { useAdminStore } from '@/lib/store'
 import { api } from '@/lib/api'
 import { formatMoney, formatNumber } from '@/lib/format'
@@ -40,6 +41,8 @@ export default function StatsPage() {
           {error}
         </div>
       )}
+
+      <DirectMembersNotice />
 
       <SetupChecklist />
 
