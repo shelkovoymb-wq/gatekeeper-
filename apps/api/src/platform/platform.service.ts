@@ -12,6 +12,7 @@ import {
   subscriptions,
 } from '../db/schema.js';
 import { maskAccountNumber, cardLast4 } from '../payments/account-types.js';
+import { DirectMembersService } from '../direct-members/direct-members.service.js';
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -40,7 +41,10 @@ function previousMonthPeriod(): { start: string; end: string } {
  */
 @Injectable()
 export class PlatformService {
-  constructor(@Inject(DB) private readonly db: Database) {}
+  constructor(
+    @Inject(DB) private readonly db: Database,
+    private readonly directMembers: DirectMembersService,
+  ) {}
 
   /** Сводка по всей платформе. */
   async overview() {
@@ -278,7 +282,14 @@ export class PlatformService {
       const pct = Number(c.commissionPct ?? 0);
       const subscription = Number(c.priceMonth ?? 0);
       const commission = Math.round(((turnover * pct) / 100) * 100) / 100;
-      const total = Math.round((subscription + commission) * 100) / 100;
+
+      // Участники, которых клиент завёл в канал сам, минуя платформу. Деньги
+      // он взял напрямую, комиссия с них — та же: иначе «мимо платформы»
+      // становится способом не платить вовсе. Неоформленные идут по цене
+      // тарифа, чтобы молчание не было выгоднее оформления.
+      const direct = await this.directMembers.summaryForPeriod(c.id, start, end, pct);
+
+      const total = Math.round((subscription + commission + direct.commission) * 100) / 100;
       const details = {
         planCode: c.planCode,
         planName: c.planName,
@@ -289,6 +300,16 @@ export class PlatformService {
         turnoverSelfReported: selfReported,
         turnoverProviderVerified: Math.round((turnover - selfReported) * 100) / 100,
         commissionAmount: commission,
+        // Прямые добавления: сколько человек, на какую базу и сколько из неё
+        // держится на слове клиента, а сколько посчитано по цене тарифа.
+        directMembers: direct.total,
+        directMembersDeclared: direct.declared,
+        directMembersPending: direct.pending,
+        directMembersDismissed: direct.dismissed,
+        directBase: direct.base,
+        directBaseSelfReported: direct.baseSelfReported,
+        directBaseFromTariff: direct.baseFromTariff,
+        directCommissionAmount: direct.commission,
         currency: c.currency,
       };
 
@@ -312,8 +333,13 @@ export class PlatformService {
           setWhere: sql`${platformInvoices.status} <> 'paid'`,
         })
         .returning({ id: platformInvoices.id, createdAt: platformInvoices.createdAt });
-      if (res.length) created += 1;
-      else updated += 1;
+      if (res.length) {
+        created += 1;
+        // Счёт записан — помечаем строки вошедшими в него. Оплаченный счёт
+        // сюда не попадает (setWhere выше), и задним числом его состав уже
+        // не меняется.
+        await this.directMembers.stampBilled(direct.ids, res[0].id);
+      } else updated += 1;
     }
     return { period: { start, end }, clients: rows.length, created, updated };
   }

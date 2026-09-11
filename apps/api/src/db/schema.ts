@@ -607,3 +607,48 @@ export const postMedia = pgTable(
     byPost: index('post_media_post_idx').on(t.postId, t.position),
   }),
 );
+
+// ─── ПРЯМЫЕ ДОБАВЛЕНИЯ ────────────────────────────────────────────────────────
+
+/**
+ * Участник, которого клиент завёл в канал сам, минуя платформу (деньги взял
+ * напрямую). Строка заводится на месяц: повторное добавление в следующем
+ * месяце — вторая продажа и второй счёт, внутри одного месяца — не задваивается.
+ */
+export const directMembers = pgTable(
+  'direct_members',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id),
+    channelId: uuid('channel_id')
+      .notNull()
+      .references(() => channels.id),
+    subscriberId: uuid('subscriber_id')
+      .notNull()
+      .references(() => subscribers.id),
+    periodMonth: date('period_month').notNull(),
+    status: text('status').notNull().default('pending'), // pending|declared|dismissed
+    planId: uuid('plan_id').references(() => plans.id),
+    declaredAmount: numeric('declared_amount', { precision: 12, scale: 2 }),
+    currency: text('currency').notNull().default('RUB'),
+    note: text('note'),
+    dismissReason: text('dismiss_reason'),
+    detectedAt: timestamp('detected_at', { withTimezone: true }).notNull().defaultNow(),
+    leftAt: timestamp('left_at', { withTimezone: true }),
+    billedInvoiceId: uuid('billed_invoice_id').references(() => platformInvoices.id),
+    billedBase: numeric('billed_base', { precision: 12, scale: 2 }),
+    billedAt: timestamp('billed_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    uniqPeriod: uniqueIndex('direct_members_period_uq').on(
+      t.channelId,
+      t.subscriberId,
+      t.periodMonth,
+    ),
+    byClient: index('direct_members_client_idx').on(t.clientId, t.periodMonth),
+    byStatus: index('direct_members_status_idx').on(t.clientId, t.status),
+  }),
+);

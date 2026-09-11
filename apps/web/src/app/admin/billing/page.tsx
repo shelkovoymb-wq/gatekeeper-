@@ -28,6 +28,36 @@ interface AvailablePlan {
   currency: string
 }
 
+const num = (v: unknown): number => (typeof v === 'number' ? v : Number(v ?? 0)) || 0
+
+/**
+ * Из чего сложился счёт. Показываем всегда, когда деталь есть: с появлением
+ * начисления за участников, заведённых вручную, «просто сумма» перестала быть
+ * понятной — клиент должен видеть, за что с него просят.
+ */
+function breakdown(d: Record<string, unknown>): string[] {
+  const parts: string[] = []
+  const sub = num(d.subscriptionAmount)
+  if (sub > 0) parts.push(`абонплата ${formatMoney(sub)}`)
+
+  const commission = num(d.commissionAmount)
+  if (commission > 0) {
+    parts.push(`комиссия ${num(d.commissionPct)}% с оборота ${formatMoney(num(d.turnoverBase))}`)
+  }
+
+  const directCommission = num(d.directCommissionAmount)
+  if (directCommission > 0 || num(d.directMembers) > 0) {
+    const people = num(d.directMembers)
+    const pending = num(d.directMembersPending)
+    parts.push(
+      `добавлены вручную: ${people} чел., база ${formatMoney(num(d.directBase))}` +
+        (pending > 0 ? ` (из них ${pending} не оформлено — по цене тарифа)` : '') +
+        ` → ${formatMoney(directCommission)}`,
+    )
+  }
+  return parts
+}
+
 const statusBadge: Record<string, string> = {
   paid: 'bg-emerald-600/20 text-emerald-700',
   pending: 'bg-amber-600/20 text-amber-700',
@@ -168,17 +198,27 @@ export default function ClientBillingPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-ledger-page">
-                  {invoices.map((inv) => (
-                    <tr key={inv.id} className="border-b border-ledger-ink/10 last:border-0 hover:bg-ledger-ink/5">
-                      <td className="px-5 py-3 text-ledger-ink/60">{inv.periodStart} — {inv.periodEnd}</td>
-                      <td className="px-5 py-3 text-right font-bold text-ledger-ink">{formatMoney(inv.amount)}</td>
-                      <td className="px-5 py-3">
-                        <span className={`rounded-sm px-2 py-1 font-ledger-mono text-xs font-medium ${statusBadge[inv.status] ?? 'bg-ledger-ink/10 text-ledger-ink/60'}`}>
-                          {inv.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {invoices.map((inv) => {
+                    const parts = breakdown(inv.details ?? {})
+                    return (
+                      <tr key={inv.id} className="border-b border-ledger-ink/10 last:border-0 hover:bg-ledger-ink/5">
+                        <td className="px-5 py-3 text-ledger-ink/60">
+                          {inv.periodStart} — {inv.periodEnd}
+                          {parts.length > 0 && (
+                            <span className="mt-1 block text-xs text-ledger-ink/45">
+                              {parts.join(' · ')}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3 text-right font-bold text-ledger-ink">{formatMoney(inv.amount)}</td>
+                        <td className="px-5 py-3">
+                          <span className={`rounded-sm px-2 py-1 font-ledger-mono text-xs font-medium ${statusBadge[inv.status] ?? 'bg-ledger-ink/10 text-ledger-ink/60'}`}>
+                            {inv.status}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

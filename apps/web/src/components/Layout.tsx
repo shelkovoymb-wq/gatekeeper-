@@ -15,6 +15,7 @@ const clientNav = [
   { href: '/admin/tariffs', label: 'Тарифы', icon: '🏷️' },
   { href: '/admin/users', label: 'Подписчики', icon: '👥' },
   { href: '/admin/posts', label: 'Посты', icon: '📝' },
+  { href: '/admin/direct-members', label: 'Добавлены вручную', icon: '🤝' },
   { href: '/admin/payments', label: 'Платежи', icon: '💳' },
   { href: '/admin/payment-methods', label: 'Приём денег', icon: '💰' },
   { href: '/admin/billing', label: 'Оплата платформы', icon: '🧾' },
@@ -31,6 +32,7 @@ const ownerNav = [
   { href: '/owner/addons', label: 'Платные опции', icon: '🧩' },
   { href: '/owner/payouts', label: 'Реквизиты и выплаты', icon: '💰' },
   { href: '/owner/client-accounts', label: 'Реквизиты клиентов', icon: '🏦' },
+  { href: '/owner/direct-members', label: 'Прямые добавления', icon: '🤝' },
   { href: '/owner/settings', label: 'Настройки', icon: '⚙️' },
 ]
 
