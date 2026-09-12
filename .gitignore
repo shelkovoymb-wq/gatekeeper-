@@ -11,3 +11,8 @@ coverage/
 .DS_Store
 .turbo/
 .pnpm-store/
+
+# Собранная витрина расхода токенов: генерится локально, содержит личную статистику
+tokens/data/
+__pycache__/
+*.pyc
